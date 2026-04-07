@@ -1,0 +1,170 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Auth ────────────────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  role          Role      @default(MEMBER)
+  active        Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts    Account[]
+  sessions    Session[]
+  timeEntries TimeEntry[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+enum Role {
+  MEMBER
+  MANAGER
+  ADMIN
+}
+
+// ─── Time Tracking ──────────────────────────────────────────────────────────
+
+model TimeEntry {
+  id       String   @id @default(cuid())
+  userId   String
+  date     DateTime @db.Date
+  category Category
+
+  // Client Work fields
+  clientName     String?
+  asanaProjectId String?
+  asanaTaskId    String?
+  asanaTaskName  String?
+  workTypeId     String?
+
+  // Non-client fields
+  activityId  String?
+  description String?
+
+  hours Float
+  notes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workType WorkType? @relation(fields: [workTypeId], references: [id])
+  activity Activity? @relation(fields: [activityId], references: [id])
+
+  @@index([userId, date])
+  @@index([date])
+  @@index([asanaProjectId])
+  @@map("time_entries")
+}
+
+enum Category {
+  CLIENT_WORK
+  INTERNAL
+  ADMIN
+  TRAINING
+}
+
+// ─── Configurable Types ─────────────────────────────────────────────────────
+
+model WorkType {
+  id        String  @id @default(cuid())
+  name      String  @unique
+  active    Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  timeEntries TimeEntry[]
+
+  @@map("work_types")
+}
+
+model Activity {
+  id       String   @id @default(cuid())
+  category Category
+  name     String
+  active   Boolean  @default(true)
+  sortOrder Int     @default(0)
+
+  timeEntries TimeEntry[]
+
+  @@unique([category, name])
+  @@map("activities")
+}
+
+// ─── Asana Cache ────────────────────────────────────────────────────────────
+
+model AsanaProject {
+  id         String   @id @default(cuid())
+  gid        String   @unique
+  name       String
+  active     Boolean  @default(true)
+  lastSynced DateTime @default(now())
+
+  tasks AsanaTask[]
+
+  @@map("asana_projects")
+}
+
+model AsanaTask {
+  id         String   @id @default(cuid())
+  gid        String   @unique
+  name       String
+  completed  Boolean  @default(false)
+  projectId  String
+  lastSynced DateTime @default(now())
+
+  project AsanaProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@map("asana_tasks")
+}
