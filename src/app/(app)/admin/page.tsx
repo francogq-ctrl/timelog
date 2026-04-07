@@ -142,9 +142,9 @@ export default function AdminPage() {
   }
 
   const tabs = [
-    { id: "types" as const, label: "Tipos de trabajo" },
-    { id: "activities" as const, label: "Actividades" },
-    { id: "team" as const, label: "Equipo" },
+    { id: "types" as const, label: "Work Types" },
+    { id: "activities" as const, label: "Activities" },
+    { id: "team" as const, label: "Team" },
     { id: "asana" as const, label: "Asana" },
   ];
 
@@ -174,13 +174,13 @@ export default function AdminPage() {
       {activeTab === "types" && (
         <div className="space-y-4">
           <p className="text-sm text-zinc-400">
-            Tipos de trabajo disponibles para Client Work (Animation, Editing, Design, etc.)
+            Available work types for Client Work (Animation, Editing, Design, etc.)
           </p>
           <div className="flex gap-2">
             <Input
               value={newWorkType}
               onChange={(e) => setNewWorkType(e.target.value)}
-              placeholder="Nuevo tipo..."
+              placeholder="New type..."
               className="bg-zinc-900 border-zinc-800"
               onKeyDown={(e) => e.key === "Enter" && addWorkType()}
             />
@@ -218,7 +218,7 @@ export default function AdminPage() {
       {activeTab === "activities" && (
         <div className="space-y-4">
           <p className="text-sm text-zinc-400">
-            Actividades predefinidas para Internal, Admin y Training
+            Predefined activities for Internal, Admin and Training
           </p>
           <div className="flex gap-2">
             <Select value={newActivityCat} onValueChange={(v) => setNewActivityCat(v ?? "INTERNAL")}>
@@ -234,7 +234,7 @@ export default function AdminPage() {
             <Input
               value={newActivity}
               onChange={(e) => setNewActivity(e.target.value)}
-              placeholder="Nueva actividad..."
+              placeholder="New activity..."
               className="bg-zinc-900 border-zinc-800"
               onKeyDown={(e) => e.key === "Enter" && addActivity()}
             />
@@ -283,13 +283,13 @@ export default function AdminPage() {
       {activeTab === "team" && (
         <div className="space-y-4">
           <p className="text-sm text-zinc-400">
-            Solo usuarios agregados aquí pueden iniciar sesión
+            Only users added here can sign in
           </p>
           <div className="flex gap-2">
             <Input
               value={newUserName}
               onChange={(e) => setNewUserName(e.target.value)}
-              placeholder="Nombre..."
+              placeholder="Name..."
               className="w-36 bg-zinc-900 border-zinc-800"
             />
             <Input
@@ -334,7 +334,7 @@ export default function AdminPage() {
                     className="cursor-pointer"
                     onClick={() => toggleUser(u.id, u.active)}
                   >
-                    {u.active ? "Activo" : "Inactivo"}
+                    {u.active ? "Active" : "Inactive"}
                   </Badge>
                 </div>
               </div>
@@ -347,7 +347,7 @@ export default function AdminPage() {
       {activeTab === "asana" && (
         <div className="space-y-4">
           <p className="text-sm text-zinc-400">
-            Sincroniza proyectos y tareas desde Asana
+            Sync projects and tasks from Asana
           </p>
           <Button
             onClick={syncAsana}
@@ -355,10 +355,10 @@ export default function AdminPage() {
             className="bg-lime-400 text-zinc-900 hover:bg-lime-300"
           >
             <RefreshCw className={cn("mr-2 h-4 w-4", syncing && "animate-spin")} />
-            {syncing ? "Sincronizando..." : "Sincronizar ahora"}
+            {syncing ? "Syncing..." : "Sync now"}
           </Button>
           <p className="text-xs text-zinc-500">
-            La sincronización también se ejecuta automáticamente cada 6 horas.
+            Sync also runs automatically every 6 hours.
           </p>
         </div>
       )}

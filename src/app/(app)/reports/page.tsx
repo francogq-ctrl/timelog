@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { format, startOfWeek, endOfWeek, subWeeks } from "date-fns";
-import { es } from "date-fns/locale";
 import { Download, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -78,7 +77,7 @@ export default function ReportsPage() {
 
   function exportCSV() {
     if (!data) return;
-    const rows = [["Persona", "Total Horas", "Client Work", "Internal", "Admin", "Training"]];
+    const rows = [["Person", "Total Hours", "Client Work", "Internal", "Admin", "Training"]];
     for (const p of data.byPerson) {
       rows.push([
         p.name,
@@ -102,15 +101,15 @@ export default function ReportsPage() {
   const maxProjectHours = data?.byProject[0]?.hours ?? 1;
 
   const periodLabels: Record<Period, string> = {
-    "this-week": "Esta semana",
-    "last-week": "Semana pasada",
-    "this-month": "Este mes",
+    "this-week": "This week",
+    "last-week": "Last week",
+    "this-month": "This month",
   };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Reportes</h1>
+        <h1 className="text-2xl font-bold">Reports</h1>
         <Button
           onClick={exportCSV}
           variant="outline"
@@ -140,12 +139,12 @@ export default function ReportsPage() {
       </div>
 
       {loading ? (
-        <p className="py-12 text-center text-sm text-zinc-500">Cargando...</p>
+        <p className="py-12 text-center text-sm text-zinc-500">Loading...</p>
       ) : data ? (
         <div className="space-y-8">
           {/* Overview cards */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatCard label="Total horas" value={`${data.overview.totalHours}h`} />
+            <StatCard label="Total hours" value={`${data.overview.totalHours}h`} />
             <StatCard
               label="Client Work"
               value={`${data.overview.clientPercent}%`}
@@ -153,16 +152,16 @@ export default function ReportsPage() {
               accent
             />
             <StatCard
-              label="Personas activas"
+              label="Active people"
               value={`${data.overview.activeUsers}/${data.overview.totalUsers}`}
               sub={
                 data.missingUsers.length > 0
-                  ? `${data.missingUsers.length} sin loguear`
+                  ? `${data.missingUsers.length} not logged`
                   : undefined
               }
               warn={data.missingUsers.length > 0}
             />
-            <StatCard label="Promedio diario" value={`${data.overview.avgDaily}h`} sub="por persona" />
+            <StatCard label="Daily average" value={`${data.overview.avgDaily}h`} sub="per person" />
           </div>
 
           {/* Missing users warning */}
@@ -170,7 +169,7 @@ export default function ReportsPage() {
             <div className="flex items-start gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
               <AlertTriangle className="mt-0.5 h-4 w-4 text-amber-400 shrink-0" />
               <div>
-                <p className="text-sm font-medium text-amber-400">Sin loguear este período</p>
+                <p className="text-sm font-medium text-amber-400">Not logged this period</p>
                 <p className="mt-1 text-xs text-zinc-400">
                   {data.missingUsers.map((u) => u.name || u.email).join(", ")}
                 </p>
@@ -180,7 +179,7 @@ export default function ReportsPage() {
 
           {/* By Project */}
           <div>
-            <h2 className="mb-4 text-lg font-semibold">Horas por Proyecto</h2>
+            <h2 className="mb-4 text-lg font-semibold">Hours by Project</h2>
             <div className="space-y-4">
               {data.byProject.map((proj) => (
                 <div key={proj.name}>
@@ -201,20 +200,20 @@ export default function ReportsPage() {
                       </span>
                     ))}
                     <span className="text-xs text-zinc-600">
-                      {proj.peopleCount} persona{proj.peopleCount !== 1 ? "s" : ""}
+                      {proj.peopleCount} {proj.peopleCount !== 1 ? "people" : "person"}
                     </span>
                   </div>
                 </div>
               ))}
               {data.byProject.length === 0 && (
-                <p className="text-sm text-zinc-500">No hay datos de proyectos para este período</p>
+                <p className="text-sm text-zinc-500">No project data for this period</p>
               )}
             </div>
           </div>
 
           {/* By Person */}
           <div>
-            <h2 className="mb-4 text-lg font-semibold">Carga por Persona</h2>
+            <h2 className="mb-4 text-lg font-semibold">Workload by Person</h2>
             <div className="grid gap-2 sm:grid-cols-2">
               {data.byPerson.map((person) => (
                 <div
@@ -243,7 +242,7 @@ export default function ReportsPage() {
                 </div>
               ))}
               {data.byPerson.length === 0 && (
-                <p className="text-sm text-zinc-500">No hay datos para este período</p>
+                <p className="text-sm text-zinc-500">No data for this period</p>
               )}
             </div>
           </div>
