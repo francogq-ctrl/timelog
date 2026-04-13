@@ -65,7 +65,7 @@ interface UserOption {
   email: string;
 }
 
-type Period = "this-week" | "last-week" | "this-month" | "last-month";
+type Period = "this-week" | "last-week" | "this-month" | "last-month" | "year" | "month" | "custom";
 
 export default function ReportsPage() {
   const [data, setData] = useState<ReportData | null>(null);
@@ -83,6 +83,12 @@ export default function ReportsPage() {
   // Dropdown open states
   const [userDropOpen, setUserDropOpen] = useState(false);
   const [clientDropOpen, setClientDropOpen] = useState(false);
+
+  // Date range state for year/month/custom modes
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth()); // 0-11
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
 
   // Target hours configuration for Hours by Person
   const [targetHours, setTargetHours] = useState(40);
@@ -131,8 +137,26 @@ export default function ReportsPage() {
           to: format(new Date(lm.getFullYear(), lm.getMonth() + 1, 0), "yyyy-MM-dd"),
         };
       }
+      case "year":
+        return {
+          from: `${selectedYear}-01-01`,
+          to: `${selectedYear}-12-31`,
+        };
+      case "month": {
+        const first = new Date(selectedYear, selectedMonth, 1);
+        const last = new Date(selectedYear, selectedMonth + 1, 0);
+        return {
+          from: format(first, "yyyy-MM-dd"),
+          to: format(last, "yyyy-MM-dd"),
+        };
+      }
+      case "custom":
+        return {
+          from: customFrom,
+          to: customTo,
+        };
     }
-  }, [period]);
+  }, [period, selectedYear, selectedMonth, customFrom, customTo]);
 
   const fetchReport = useCallback(async () => {
     setLoading(true);
@@ -159,9 +183,13 @@ export default function ReportsPage() {
     setAllClients([]); // reset client list on period change so it refreshes
   }, [period]);
 
+  // Guard: only fetch if custom mode has both dates
   useEffect(() => {
+    if (period === "custom" && (!customFrom || !customTo)) {
+      return; // Don't fetch until both dates are filled
+    }
     fetchReport();
-  }, [fetchReport]);
+  }, [fetchReport, period, customFrom, customTo]);
 
   // Filtered deliverables (project search is client-side only)
   const filteredDeliverables = data?.byDeliverable.filter((d) => {
@@ -292,6 +320,9 @@ export default function ReportsPage() {
     "last-week": "Last week",
     "this-month": "This month",
     "last-month": "Last month",
+    "year": "Year",
+    "month": "Month",
+    "custom": "Custom",
   };
 
   const categoryColors: Record<string, string> = {
@@ -351,21 +382,96 @@ export default function ReportsPage() {
       </div>
 
       {/* Period selector */}
-      <div className="flex gap-1 rounded-xl bg-white/[0.03] border border-white/[0.06] p-1 w-fit">
-        {(["this-week", "last-week", "this-month", "last-month"] as Period[]).map((p) => (
-          <button
-            key={p}
-            onClick={() => setPeriod(p)}
-            className={cn(
-              "rounded-lg px-4 py-2 text-[13px] font-medium transition",
-              period === p
-                ? "bg-white/[0.08] text-white"
-                : "text-zinc-500 hover:text-zinc-300"
-            )}
-          >
-            {periodLabels[p]}
-          </button>
-        ))}
+      <div className="space-y-3">
+        <div className="flex gap-1 rounded-xl bg-white/[0.03] border border-white/[0.06] p-1 w-fit flex-wrap">
+          {(["this-week", "last-week", "this-month", "last-month", "year", "month", "custom"] as Period[]).map((p) => (
+            <button
+              key={p}
+              onClick={() => {
+                setPeriod(p);
+                // Reset custom dates when switching away from custom mode
+                if (p !== "custom") {
+                  setCustomFrom("");
+                  setCustomTo("");
+                }
+              }}
+              className={cn(
+                "rounded-lg px-4 py-2 text-[13px] font-medium transition",
+                period === p
+                  ? "bg-white/[0.08] text-white"
+                  : "text-zinc-500 hover:text-zinc-300"
+              )}
+            >
+              {periodLabels[p]}
+            </button>
+          ))}
+        </div>
+
+        {/* Contextual controls */}
+        {period === "year" && (
+          <div className="flex gap-2 items-center">
+            <label className="text-[13px] text-zinc-400">Year:</label>
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+              className="bg-[#141416] border border-white/[0.06] text-zinc-400 rounded-lg px-3 py-2 text-[13px] cursor-pointer hover:border-white/[0.12] transition"
+            >
+              {Array.from({ length: new Date().getFullYear() - 2023 }, (_, i) => 2024 + i).reverse().map((year) => (
+                <option key={year} value={year}>
+                  {year}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {period === "month" && (
+          <div className="flex gap-2 items-center">
+            <label className="text-[13px] text-zinc-400">Month:</label>
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+              className="bg-[#141416] border border-white/[0.06] text-zinc-400 rounded-lg px-3 py-2 text-[13px] cursor-pointer hover:border-white/[0.12] transition"
+            >
+              {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map((m, i) => (
+                <option key={i} value={i}>
+                  {m}
+                </option>
+              ))}
+            </select>
+            <label className="text-[13px] text-zinc-400 ml-2">Year:</label>
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+              className="bg-[#141416] border border-white/[0.06] text-zinc-400 rounded-lg px-3 py-2 text-[13px] cursor-pointer hover:border-white/[0.12] transition"
+            >
+              {Array.from({ length: new Date().getFullYear() - 2023 }, (_, i) => 2024 + i).reverse().map((year) => (
+                <option key={year} value={year}>
+                  {year}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {period === "custom" && (
+          <div className="flex gap-2 items-center">
+            <label className="text-[13px] text-zinc-400">From:</label>
+            <input
+              type="date"
+              value={customFrom}
+              onChange={(e) => setCustomFrom(e.target.value)}
+              className="bg-[#141416] border border-white/[0.06] text-zinc-400 rounded-lg px-3 py-2 text-[13px] cursor-pointer hover:border-white/[0.12] transition"
+            />
+            <label className="text-[13px] text-zinc-400">To:</label>
+            <input
+              type="date"
+              value={customTo}
+              onChange={(e) => setCustomTo(e.target.value)}
+              className="bg-[#141416] border border-white/[0.06] text-zinc-400 rounded-lg px-3 py-2 text-[13px] cursor-pointer hover:border-white/[0.12] transition"
+            />
+          </div>
+        )}
       </div>
 
       {/* Filters bar */}
