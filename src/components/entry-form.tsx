@@ -2,17 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { Category } from "@/generated/prisma/client";
-import { Minus, Plus } from "lucide-react";
+import { X } from "lucide-react";
+
 import { cn } from "@/lib/utils";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 
 interface WorkType {
   id: string;
@@ -22,7 +14,7 @@ interface WorkType {
 interface Activity {
   id: string;
   name: string;
-  category: Category;
+  category: string;
 }
 
 interface AsanaProject {
@@ -60,19 +52,32 @@ interface EntryFormProps {
 }
 
 const categories = [
-  { value: "CLIENT_WORK" as Category, label: "Client Work", color: "lime" },
-  { value: "INTERNAL" as Category, label: "Internal", color: "violet" },
-  { value: "ADMIN" as Category, label: "Admin", color: "amber" },
-  { value: "TRAINING" as Category, label: "Training", color: "blue" },
+  { value: "CLIENT_WORK" as Category, label: "Client", icon: "🎯", color: "lime" },
+  { value: "INTERNAL" as Category, label: "Internal", icon: "⚡", color: "violet" },
+  { value: "ADMIN" as Category, label: "Admin", icon: "📋", color: "amber" },
+  { value: "TRAINING" as Category, label: "Training", icon: "📚", color: "blue" },
 ];
 
-const categoryColors: Record<string, string> = {
-  lime: "bg-lime-400/15 border-lime-400 text-lime-400",
-  violet: "bg-violet-400/15 border-violet-400 text-violet-400",
-  amber: "bg-amber-400/15 border-amber-400 text-amber-400",
-  blue: "bg-blue-400/15 border-blue-400 text-blue-400",
-  inactive: "bg-zinc-800/50 border-zinc-700 text-zinc-400",
+const categoryStyles: Record<string, { active: string; inactive: string }> = {
+  lime: {
+    active: "bg-lime-400/12 border-lime-400/30 text-lime-400",
+    inactive: "border-white/[0.06] text-zinc-500 hover:border-white/[0.1] hover:text-zinc-300",
+  },
+  violet: {
+    active: "bg-violet-400/12 border-violet-400/30 text-violet-400",
+    inactive: "border-white/[0.06] text-zinc-500 hover:border-white/[0.1] hover:text-zinc-300",
+  },
+  amber: {
+    active: "bg-amber-400/12 border-amber-400/30 text-amber-400",
+    inactive: "border-white/[0.06] text-zinc-500 hover:border-white/[0.1] hover:text-zinc-300",
+  },
+  blue: {
+    active: "bg-blue-400/12 border-blue-400/30 text-blue-400",
+    inactive: "border-white/[0.06] text-zinc-500 hover:border-white/[0.1] hover:text-zinc-300",
+  },
 };
+
+const hourPresets = [0.5, 1, 2, 4, 8];
 
 export function EntryForm({
   initialData,
@@ -106,7 +111,6 @@ export function EntryForm({
   const [loading, setLoading] = useState(false);
   const [loadingTasks, setLoadingTasks] = useState(false);
 
-  // Fetch tasks when project changes
   useEffect(() => {
     if (!selectedProject) {
       setTasks([]);
@@ -148,7 +152,8 @@ export function EntryForm({
           category === "CLIENT_WORK" ? selectedWorkType || undefined : undefined,
         activityId:
           category !== "CLIENT_WORK" ? selectedActivity || undefined : undefined,
-        description: category !== "CLIENT_WORK" ? description || undefined : undefined,
+        description:
+          category !== "CLIENT_WORK" ? description || undefined : undefined,
         hours,
         notes: notes || undefined,
       });
@@ -158,189 +163,216 @@ export function EntryForm({
   }
 
   return (
-    <div className="space-y-5">
-      {/* Category selector */}
-      <div>
-        <p className="mb-2 text-xs uppercase tracking-wider text-zinc-500">
-          Categoría
-        </p>
-        <div className="grid grid-cols-4 gap-2">
-          {categories.map((cat) => (
-            <button
-              key={cat.value}
-              onClick={() => setCategory(cat.value)}
-              className={cn(
-                "rounded-lg border px-3 py-2.5 text-center text-xs font-medium transition",
-                category === cat.value
-                  ? categoryColors[cat.color]
-                  : categoryColors.inactive + " hover:bg-zinc-800"
-              )}
-            >
-              {cat.label}
-            </button>
-          ))}
-        </div>
+    <div className="animate-entry-in rounded-xl border border-white/[0.08] bg-[#141416] p-5">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-5">
+        <h3 className="text-[14px] font-semibold text-white">
+          {initialData ? "Edit Entry" : "New Entry"}
+        </h3>
+        <button
+          onClick={onCancel}
+          className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-500 transition-gpu hover:bg-white/[0.06] hover:text-white"
+        >
+          <X className="h-4 w-4" />
+        </button>
       </div>
 
-      {/* Client Work fields */}
-      {category === "CLIENT_WORK" && (
-        <>
-          <div>
-            <p className="mb-2 text-xs uppercase tracking-wider text-zinc-500">
-              Cliente / Proyecto
-            </p>
-            <Select value={selectedProject} onValueChange={(v) => setSelectedProject(v ?? "")}>
-              <SelectTrigger>
-                <SelectValue placeholder="Seleccionar proyecto..." />
-              </SelectTrigger>
-              <SelectContent>
-                {asanaProjects.map((p) => (
-                  <SelectItem key={p.gid} value={p.gid}>
-                    {p.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {selectedProject && (
-            <div>
-              <p className="mb-2 text-xs uppercase tracking-wider text-zinc-500">
-                Task / Deliverable{" "}
-                <span className="text-zinc-600">(desde Asana)</span>
-              </p>
-              <Select
-                value={selectedTask}
-                onValueChange={(v) => setSelectedTask(v ?? "")}
-                disabled={loadingTasks}
-              >
-                <SelectTrigger>
-                  <SelectValue
-                    placeholder={
-                      loadingTasks ? "Cargando..." : "Seleccionar task..."
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {tasks.map((t) => (
-                    <SelectItem key={t.gid} value={t.gid}>
-                      {t.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          <div>
-            <p className="mb-2 text-xs uppercase tracking-wider text-zinc-500">
-              Tipo de trabajo
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {workTypes.map((wt) => (
+      <div className="space-y-5">
+        {/* Category selector */}
+        <div>
+          <label className="mb-2 block text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+            Category
+          </label>
+          <div className="grid grid-cols-4 gap-1.5">
+            {categories.map((cat) => {
+              const styles = categoryStyles[cat.color];
+              const isActive = category === cat.value;
+              return (
                 <button
-                  key={wt.id}
-                  onClick={() => setSelectedWorkType(wt.id)}
+                  key={cat.value}
+                  onClick={() => setCategory(cat.value)}
                   className={cn(
-                    "rounded-full border px-3.5 py-2 text-xs font-medium transition",
-                    selectedWorkType === wt.id
-                      ? "bg-lime-400/15 border-lime-400 text-lime-400"
-                      : "border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-300"
+                    "flex items-center justify-center gap-1.5 rounded-lg border py-2.5 text-[12px] font-medium transition-gpu",
+                    isActive ? styles.active : styles.inactive
                   )}
                 >
-                  {wt.name}
+                  <span className="text-[13px]">{cat.icon}</span>
+                  {cat.label}
                 </button>
-              ))}
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Client Work fields */}
+        {category === "CLIENT_WORK" && (
+          <>
+            <div>
+              <label className="mb-2 block text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+                Project
+              </label>
+              <select
+                value={selectedProject}
+                onChange={(e) => { setSelectedProject(e.target.value); setSelectedTask(""); }}
+                className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-[13px] text-white outline-none transition-gpu focus:border-lime-400/30 focus:ring-1 focus:ring-lime-400/20"
+              >
+                <option value="" className="bg-[#141416]">Select project...</option>
+                {asanaProjects.map((p) => (
+                  <option key={p.gid} value={p.gid} className="bg-[#141416]">
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {selectedProject && (
+              <div>
+                <label className="mb-2 block text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+                  Task <span className="text-zinc-600">from Asana</span>
+                </label>
+                <select
+                  value={selectedTask}
+                  onChange={(e) => setSelectedTask(e.target.value)}
+                  disabled={loadingTasks}
+                  className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-[13px] text-white outline-none transition-gpu focus:border-lime-400/30 focus:ring-1 focus:ring-lime-400/20 disabled:opacity-50"
+                >
+                  <option value="" className="bg-[#141416]">
+                    {loadingTasks ? "Loading tasks..." : "Select task..."}
+                  </option>
+                  {tasks.map((t) => (
+                    <option key={t.gid} value={t.gid} className="bg-[#141416]">
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div>
+              <label className="mb-2 block text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+                Work type
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {workTypes.map((wt) => (
+                  <button
+                    key={wt.id}
+                    onClick={() => setSelectedWorkType(selectedWorkType === wt.id ? "" : wt.id)}
+                    className={cn(
+                      "rounded-full border px-3 py-1.5 text-[12px] font-medium transition-gpu",
+                      selectedWorkType === wt.id
+                        ? "bg-lime-400/12 border-lime-400/30 text-lime-400"
+                        : "border-white/[0.08] text-zinc-500 hover:border-white/[0.12] hover:text-zinc-300"
+                    )}
+                  >
+                    {wt.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Non-client fields */}
+        {category !== "CLIENT_WORK" && (
+          <>
+            <div>
+              <label className="mb-2 block text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+                Activity
+              </label>
+              <select
+                value={selectedActivity}
+                onChange={(e) => setSelectedActivity(e.target.value)}
+                className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-[13px] text-white outline-none transition-gpu focus:border-violet-400/30 focus:ring-1 focus:ring-violet-400/20"
+              >
+                <option value="" className="bg-[#141416]">Select activity...</option>
+                {filteredActivities.map((a) => (
+                  <option key={a.id} value={a.id} className="bg-[#141416]">
+                    {a.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+                Description <span className="text-zinc-600">optional</span>
+              </label>
+              <input
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Brief description..."
+                className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-[13px] text-white placeholder:text-zinc-600 outline-none transition-gpu focus:border-white/[0.15]"
+              />
+            </div>
+          </>
+        )}
+
+        {/* Hours */}
+        <div>
+          <label className="mb-2 block text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+            Hours
+          </label>
+          <div className="flex items-center gap-2">
+            {/* Presets */}
+            {hourPresets.map((h) => (
+              <button
+                key={h}
+                onClick={() => setHours(h)}
+                className={cn(
+                  "flex h-10 items-center justify-center rounded-lg border px-3 font-mono text-[13px] font-medium transition-gpu",
+                  hours === h
+                    ? "border-lime-400/30 bg-lime-400/12 text-lime-400"
+                    : "border-white/[0.08] text-zinc-500 hover:border-white/[0.12] hover:text-zinc-300"
+                )}
+              >
+                {h}
+              </button>
+            ))}
+            {/* Custom input */}
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                value={hours}
+                onChange={(e) => setHours(Math.max(0.25, Math.min(24, parseFloat(e.target.value) || 0)))}
+                step={0.25}
+                min={0.25}
+                max={24}
+                className="h-10 w-16 rounded-lg border border-white/[0.08] bg-white/[0.03] text-center font-mono text-[14px] font-semibold text-white outline-none transition-gpu focus:border-lime-400/30"
+              />
+              <span className="text-[13px] text-zinc-500">h</span>
             </div>
           </div>
-        </>
-      )}
+        </div>
 
-      {/* Non-client fields */}
-      {category !== "CLIENT_WORK" && (
-        <>
-          <div>
-            <p className="mb-2 text-xs uppercase tracking-wider text-zinc-500">
-              Actividad
-            </p>
-            <Select value={selectedActivity} onValueChange={(v) => setSelectedActivity(v ?? "")}>
-              <SelectTrigger>
-                <SelectValue placeholder="Seleccionar actividad..." />
-              </SelectTrigger>
-              <SelectContent>
-                {filteredActivities.map((a) => (
-                  <SelectItem key={a.id} value={a.id}>
-                    {a.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+        {/* Notes */}
+        <div>
+          <label className="mb-2 block text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+            Notes <span className="text-zinc-600">optional</span>
+          </label>
+          <input
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Any extra details..."
+            className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-[13px] text-white placeholder:text-zinc-600 outline-none transition-gpu focus:border-white/[0.15]"
+          />
+        </div>
 
-          <div>
-            <p className="mb-2 text-xs uppercase tracking-wider text-zinc-500">
-              Descripción{" "}
-              <span className="text-zinc-600">(opcional)</span>
-            </p>
-            <Input
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Detalle breve..."
-              className="bg-zinc-900 border-zinc-800"
-            />
-          </div>
-        </>
-      )}
-
-      {/* Hours */}
-      <div>
-        <p className="mb-2 text-xs uppercase tracking-wider text-zinc-500">
-          Horas
-        </p>
-        <div className="flex items-center gap-4">
+        {/* Actions */}
+        <div className="flex gap-2 pt-1">
           <button
-            onClick={() => setHours(Math.max(0.25, hours - 0.25))}
-            className="flex h-10 w-10 items-center justify-center rounded-lg border border-zinc-700 text-zinc-400 transition hover:bg-zinc-800 hover:text-white"
+            onClick={handleSubmit}
+            disabled={loading}
+            className="flex-1 rounded-lg bg-lime-400 py-2.5 text-[13px] font-semibold text-[#0a0a0b] transition-gpu hover:bg-lime-300 disabled:opacity-50"
           >
-            <Minus className="h-4 w-4" />
+            {loading ? "Saving..." : initialData ? "Update" : "Log Entry"}
           </button>
-          <span className="min-w-[60px] text-center text-3xl font-bold text-white">
-            {hours}
-          </span>
           <button
-            onClick={() => setHours(Math.min(24, hours + 0.25))}
-            className="flex h-10 w-10 items-center justify-center rounded-lg border border-zinc-700 text-zinc-400 transition hover:bg-zinc-800 hover:text-white"
+            onClick={onCancel}
+            className="rounded-lg border border-white/[0.08] px-4 py-2.5 text-[13px] font-medium text-zinc-400 transition-gpu hover:bg-white/[0.04] hover:text-white"
           >
-            <Plus className="h-4 w-4" />
+            Cancel
           </button>
         </div>
-      </div>
-
-      {/* Notes */}
-      <div>
-        <p className="mb-2 text-xs uppercase tracking-wider text-zinc-500">
-          Notas <span className="text-zinc-600">(opcional)</span>
-        </p>
-        <Input
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          placeholder="Algún detalle extra..."
-          className="bg-zinc-900 border-zinc-800"
-        />
-      </div>
-
-      {/* Actions */}
-      <div className="flex gap-3 pt-2">
-        <Button
-          onClick={handleSubmit}
-          disabled={loading}
-          className="flex-1 bg-lime-400 text-zinc-900 font-semibold hover:bg-lime-300"
-        >
-          {loading ? "Guardando..." : initialData ? "Actualizar" : "Guardar entrada"}
-        </Button>
-        <Button variant="outline" onClick={onCancel} className="border-zinc-700">
-          Cancelar
-        </Button>
       </div>
     </div>
   );

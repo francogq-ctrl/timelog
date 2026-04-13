@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plus, RefreshCw, Check, X } from "lucide-react";
+import { Plus, RefreshCw, Check, X, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -35,32 +35,57 @@ interface User {
   active: boolean;
 }
 
+interface AsanaProject {
+  id: string;
+  gid: string;
+  name: string;
+  active: boolean;
+  lastSynced: string | null;
+}
+
 export default function AdminPage() {
   const [workTypes, setWorkTypes] = useState<WorkType[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [asanaProjects, setAsanaProjects] = useState<AsanaProject[]>([]);
   const [newWorkType, setNewWorkType] = useState("");
   const [newActivity, setNewActivity] = useState("");
-  const [newActivityCat, setNewActivityCat] = useState("INTERNAL");
+  const [newActivityCat, setNewActivityCat] = useState("");
+  const [customCatMode, setCustomCatMode] = useState(false);
   const [newUserEmail, setNewUserEmail] = useState("");
   const [newUserName, setNewUserName] = useState("");
   const [syncing, setSyncing] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"types" | "activities" | "team" | "asana">("types");
 
   const fetchAll = useCallback(async () => {
-    const [wt, act, usr] = await Promise.all([
+    const [wt, act, usr, ap] = await Promise.all([
       fetch("/api/admin/work-types").then((r) => r.json()),
       fetch("/api/admin/activities").then((r) => r.json()),
       fetch("/api/admin/users").then((r) => r.json()),
+      fetch("/api/admin/asana-projects").then((r) => r.json()),
     ]);
     setWorkTypes(wt);
     setActivities(act);
     setUsers(usr);
+    setAsanaProjects(ap);
   }, []);
 
   useEffect(() => {
     fetchAll();
   }, [fetchAll]);
+
+  // Derive categories dynamically from DB
+  const categories = [...new Set(activities.map((a) => a.category))].sort();
+
+  // Set default category when activities load
+  useEffect(() => {
+    if (categories.length > 0 && !newActivityCat) {
+      setNewActivityCat(categories[0]);
+    }
+  }, [categories, newActivityCat]);
+
+  // ─── Work Types ───────────────────────────────────────────────
 
   async function addWorkType() {
     if (!newWorkType.trim()) return;
@@ -82,14 +107,32 @@ export default function AdminPage() {
     fetchAll();
   }
 
+  async function deleteWorkType(id: string, name: string) {
+    if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+    const res = await fetch("/api/admin/work-types", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      alert(data.error);
+      return;
+    }
+    fetchAll();
+  }
+
+  // ─── Activities ───────────────────────────────────────────────
+
   async function addActivity() {
-    if (!newActivity.trim()) return;
+    if (!newActivity.trim() || !newActivityCat.trim()) return;
     await fetch("/api/admin/activities", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: newActivity.trim(), category: newActivityCat }),
+      body: JSON.stringify({ name: newActivity.trim(), category: newActivityCat.trim().toUpperCase() }),
     });
     setNewActivity("");
+    setCustomCatMode(false);
     fetchAll();
   }
 
@@ -101,6 +144,40 @@ export default function AdminPage() {
     });
     fetchAll();
   }
+
+  async function deleteActivity(id: string, name: string) {
+    if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+    const res = await fetch("/api/admin/activities", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      alert(data.error);
+      return;
+    }
+    fetchAll();
+  }
+
+  async function deleteCategory(category: string) {
+    const count = activities.filter((a) => a.category === category).length;
+    if (!confirm(`Delete category "${category}" and all ${count} activities in it? This cannot be undone.`)) return;
+    const res = await fetch("/api/admin/activities", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ category }),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      alert(data.error);
+      return;
+    }
+    setNewActivityCat("");
+    fetchAll();
+  }
+
+  // ─── Users ────────────────────────────────────────────────────
 
   async function addUser() {
     if (!newUserEmail.trim()) return;
@@ -132,10 +209,62 @@ export default function AdminPage() {
     fetchAll();
   }
 
+  async function deleteUser(id: string, name: string | null, email: string) {
+    const label = name || email;
+    if (!confirm(`Delete ${label}? This cannot be undone.`)) return;
+    await fetch("/api/admin/users", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    fetchAll();
+  }
+
+  // ─── Asana ────────────────────────────────────────────────────
+
+  async function toggleAsanaProject(id: string, active: boolean) {
+    await fetch("/api/admin/asana-projects", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, active: !active }),
+    });
+    fetchAll();
+  }
+
+  async function deleteAsanaProject(id: string, name: string) {
+    if (!confirm(`Remove "${name}" from the list permanently?`)) return;
+    await fetch("/api/admin/asana-projects", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    fetchAll();
+  }
+
+  async function purgeInactiveProjects() {
+    const count = asanaProjects.filter((p) => !p.active).length;
+    if (!confirm(`Permanently remove ${count} inactive projects from the list?`)) return;
+    await fetch("/api/admin/asana-projects", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ purgeInactive: true }),
+    });
+    fetchAll();
+  }
+
   async function syncAsana() {
     setSyncing(true);
+    setSyncError(null);
     try {
-      await fetch("/api/asana/sync", { method: "POST" });
+      const res = await fetch("/api/asana/sync", { method: "POST" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setSyncError(data.error || `Sync failed (${res.status})`);
+      } else {
+        fetchAll();
+      }
+    } catch (e) {
+      setSyncError(e instanceof Error ? e.message : "Network error");
     } finally {
       setSyncing(false);
     }
@@ -147,6 +276,8 @@ export default function AdminPage() {
     { id: "team" as const, label: "Team" },
     { id: "asana" as const, label: "Asana" },
   ];
+
+  const inactiveAsanaCount = asanaProjects.filter((p) => !p.active).length;
 
   return (
     <div className="space-y-6">
@@ -197,17 +328,25 @@ export default function AdminPage() {
                 <span className={cn("text-sm", !wt.active && "text-zinc-500 line-through")}>
                   {wt.name}
                 </span>
-                <button
-                  onClick={() => toggleWorkType(wt.id, wt.active)}
-                  className={cn(
-                    "rounded-md p-1.5 transition",
-                    wt.active
-                      ? "text-lime-400 hover:bg-lime-400/10"
-                      : "text-zinc-500 hover:bg-zinc-800"
-                  )}
-                >
-                  {wt.active ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => toggleWorkType(wt.id, wt.active)}
+                    className={cn(
+                      "rounded-md p-1.5 transition",
+                      wt.active
+                        ? "text-lime-400 hover:bg-lime-400/10"
+                        : "text-zinc-500 hover:bg-zinc-800"
+                    )}
+                  >
+                    {wt.active ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
+                  </button>
+                  <button
+                    onClick={() => deleteWorkType(wt.id, wt.name)}
+                    className="rounded-md p-1.5 text-zinc-600 transition hover:bg-red-500/10 hover:text-red-400"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -218,19 +357,41 @@ export default function AdminPage() {
       {activeTab === "activities" && (
         <div className="space-y-4">
           <p className="text-sm text-zinc-400">
-            Predefined activities for Internal, Admin and Training
+            Predefined activities for non-client time entries. Categories are dynamic — type any name.
           </p>
           <div className="flex gap-2">
-            <Select value={newActivityCat} onValueChange={(v) => setNewActivityCat(v ?? "INTERNAL")}>
-              <SelectTrigger className="w-36">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="INTERNAL">Internal</SelectItem>
-                <SelectItem value="ADMIN">Admin</SelectItem>
-                <SelectItem value="TRAINING">Training</SelectItem>
-              </SelectContent>
-            </Select>
+            {/* Category: select existing or type new */}
+            {customCatMode ? (
+              <Input
+                value={newActivityCat}
+                onChange={(e) => setNewActivityCat(e.target.value)}
+                placeholder="New category name..."
+                className="w-48 bg-zinc-900 border-zinc-800"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") { setCustomCatMode(false); setNewActivityCat(categories[0] ?? ""); }
+                }}
+              />
+            ) : (
+              <Select
+                value={newActivityCat}
+                onValueChange={(v) => {
+                  if (!v) return;
+                  if (v === "__new__") { setCustomCatMode(true); setNewActivityCat(""); }
+                  else setNewActivityCat(v);
+                }}
+              >
+                <SelectTrigger className="w-48">
+                  <SelectValue placeholder="Category..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((cat) => (
+                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                  ))}
+                  <SelectItem value="__new__">+ New category</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
             <Input
               value={newActivity}
               onChange={(e) => setNewActivity(e.target.value)}
@@ -242,14 +403,24 @@ export default function AdminPage() {
               <Plus className="h-4 w-4" />
             </Button>
           </div>
-          {["INTERNAL", "ADMIN", "TRAINING"].map((cat) => {
+
+          {categories.map((cat) => {
             const catActivities = activities.filter((a) => a.category === cat);
-            if (catActivities.length === 0) return null;
             return (
               <div key={cat}>
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">
-                  {cat}
-                </h3>
+                <div className="mb-2 flex items-center justify-between">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+                    {cat}
+                  </h3>
+                  <button
+                    onClick={() => deleteCategory(cat)}
+                    className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-zinc-600 transition hover:bg-red-500/10 hover:text-red-400"
+                    title={`Delete category ${cat}`}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    Delete category
+                  </button>
+                </div>
                 <div className="space-y-2">
                   {catActivities.map((a) => (
                     <div
@@ -259,17 +430,25 @@ export default function AdminPage() {
                       <span className={cn("text-sm", !a.active && "text-zinc-500 line-through")}>
                         {a.name}
                       </span>
-                      <button
-                        onClick={() => toggleActivity(a.id, a.active)}
-                        className={cn(
-                          "rounded-md p-1.5 transition",
-                          a.active
-                            ? "text-lime-400 hover:bg-lime-400/10"
-                            : "text-zinc-500 hover:bg-zinc-800"
-                        )}
-                      >
-                        {a.active ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => toggleActivity(a.id, a.active)}
+                          className={cn(
+                            "rounded-md p-1.5 transition",
+                            a.active
+                              ? "text-lime-400 hover:bg-lime-400/10"
+                              : "text-zinc-500 hover:bg-zinc-800"
+                          )}
+                        >
+                          {a.active ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
+                        </button>
+                        <button
+                          onClick={() => deleteActivity(a.id, a.name)}
+                          className="rounded-md p-1.5 text-zinc-600 transition hover:bg-red-500/10 hover:text-red-400"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -336,6 +515,13 @@ export default function AdminPage() {
                   >
                     {u.active ? "Active" : "Inactive"}
                   </Badge>
+                  <button
+                    onClick={() => deleteUser(u.id, u.name, u.email)}
+                    className="rounded-md p-1.5 text-zinc-600 transition hover:bg-red-500/10 hover:text-red-400"
+                    title="Delete user"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
                 </div>
               </div>
             ))}
@@ -349,17 +535,81 @@ export default function AdminPage() {
           <p className="text-sm text-zinc-400">
             Sync projects and tasks from Asana
           </p>
-          <Button
-            onClick={syncAsana}
-            disabled={syncing}
-            className="bg-lime-400 text-zinc-900 hover:bg-lime-300"
-          >
-            <RefreshCw className={cn("mr-2 h-4 w-4", syncing && "animate-spin")} />
-            {syncing ? "Syncing..." : "Sync now"}
-          </Button>
-          <p className="text-xs text-zinc-500">
-            Sync also runs automatically every 6 hours.
-          </p>
+          <div className="flex items-center gap-3 flex-wrap">
+            <Button
+              onClick={syncAsana}
+              disabled={syncing}
+              className="bg-lime-400 text-zinc-900 hover:bg-lime-300"
+            >
+              <RefreshCw className={cn("mr-2 h-4 w-4", syncing && "animate-spin")} />
+              {syncing ? "Syncing..." : "Sync now"}
+            </Button>
+            {inactiveAsanaCount > 0 && (
+              <Button
+                onClick={purgeInactiveProjects}
+                variant="outline"
+                size="sm"
+                className="border-zinc-700 text-zinc-400 hover:border-red-500/50 hover:text-red-400"
+              >
+                <Trash2 className="mr-2 h-3.5 w-3.5" />
+                Purge {inactiveAsanaCount} inactive
+              </Button>
+            )}
+            <p className="text-xs text-zinc-500">
+              Also runs automatically every 6 hours.
+            </p>
+          </div>
+
+          {syncError && (
+            <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+              ⚠️ {syncError}
+            </div>
+          )}
+
+          {asanaProjects.length > 0 && (
+            <>
+              <div className="flex items-center justify-between pt-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+                  Projects
+                </h3>
+                <span className="text-xs text-zinc-500">
+                  {asanaProjects.filter((p) => p.active).length} of {asanaProjects.length} visible
+                </span>
+              </div>
+              <div className="space-y-2">
+                {asanaProjects.map((p) => (
+                  <div
+                    key={p.id}
+                    className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-3"
+                  >
+                    <span className={cn("text-sm", !p.active && "text-zinc-500 line-through")}>
+                      {p.name}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => toggleAsanaProject(p.id, p.active)}
+                        className={cn(
+                          "rounded-md p-1.5 transition",
+                          p.active
+                            ? "text-lime-400 hover:bg-lime-400/10"
+                            : "text-zinc-500 hover:bg-zinc-800"
+                        )}
+                      >
+                        {p.active ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
+                      </button>
+                      <button
+                        onClick={() => deleteAsanaProject(p.id, p.name)}
+                        className="rounded-md p-1.5 text-zinc-600 transition hover:bg-red-500/10 hover:text-red-400"
+                        title="Remove from list"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>

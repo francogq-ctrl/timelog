@@ -13,9 +13,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Date required" }, { status: 400 });
   }
 
+  const isAdmin = session.user.role === "ADMIN";
+  const requestedUserId = req.nextUrl.searchParams.get("userId");
+  const targetUserId = isAdmin && requestedUserId ? requestedUserId : session.user.id;
+
   const entries = await prisma.timeEntry.findMany({
     where: {
-      userId: session.user.id,
+      userId: targetUserId,
       date: new Date(date),
     },
     include: {
@@ -55,9 +59,12 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const isAdmin = session.user.role === "ADMIN";
+  const targetUserId = isAdmin && data.userId ? data.userId : session.user.id;
+
   const entry = await prisma.timeEntry.create({
     data: {
-      userId: session.user.id,
+      userId: targetUserId,
       date: entryDate,
       category: data.category,
       clientName: data.clientName || null,

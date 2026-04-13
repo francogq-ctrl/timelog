@@ -40,3 +40,34 @@ export async function PATCH(req: NextRequest) {
   });
   return NextResponse.json(activity);
 }
+
+export async function DELETE(req: NextRequest) {
+  const session = await requireAdmin();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id, category } = await req.json();
+
+  // Bulk delete all activities in a category
+  if (category) {
+    const used = await prisma.timeEntry.count({ where: { activity: { category } } });
+    if (used > 0) {
+      return NextResponse.json(
+        { error: `Cannot delete: ${used} time entries use activities in this category.` },
+        { status: 409 }
+      );
+    }
+    await prisma.activity.deleteMany({ where: { category } });
+    return NextResponse.json({ success: true });
+  }
+
+  // Single delete
+  const count = await prisma.timeEntry.count({ where: { activityId: id } });
+  if (count > 0) {
+    return NextResponse.json(
+      { error: `Cannot delete: ${count} time entries use this activity.` },
+      { status: 409 }
+    );
+  }
+  await prisma.activity.delete({ where: { id } });
+  return NextResponse.json({ success: true });
+}

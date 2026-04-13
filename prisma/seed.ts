@@ -39,6 +39,18 @@ async function main() {
     }
   }
 
+  // Create admin user
+  await prisma.user.upsert({
+    where: { email: "franco@andgather.co" },
+    update: { role: "ADMIN", active: true },
+    create: {
+      email: "franco@andgather.co",
+      name: "Franco Garcia",
+      role: "ADMIN",
+      active: true,
+    },
+  });
+
   console.log("Seed completed successfully");
 }
 

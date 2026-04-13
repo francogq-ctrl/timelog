@@ -8,7 +8,7 @@ export async function syncAsana() {
     // Upsert project
     await prisma.asanaProject.upsert({
       where: { gid: project.gid },
-      update: { name: project.name, active: true, lastSynced: new Date() },
+      update: { name: project.name, lastSynced: new Date() },
       create: { gid: project.gid, name: project.name },
     });
 

@@ -2,12 +2,18 @@ import { signIn } from "@/lib/auth";
 
 export default function LoginPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-950">
+    <div className="flex min-h-screen items-center justify-center bg-[#0a0a0b]">
       <div className="w-full max-w-sm space-y-8 px-6">
         <div className="text-center">
-          <h1 className="text-3xl font-bold text-white">TimeLog</h1>
-          <p className="mt-2 text-sm text-zinc-400">
-            Registrá tus horas de trabajo
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-lime-400/10">
+            <svg className="h-5 w-5 text-lime-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <polyline points="12 6 12 12 16 14" />
+            </svg>
+          </div>
+          <h1 className="text-2xl font-semibold tracking-tight text-white">TimeLog</h1>
+          <p className="mt-2 text-[13px] text-zinc-500">
+            Daily time tracking for your team
           </p>
         </div>
         <form
@@ -18,9 +24,9 @@ export default function LoginPage() {
         >
           <button
             type="submit"
-            className="flex w-full items-center justify-center gap-3 rounded-xl bg-white px-4 py-3 text-sm font-semibold text-zinc-900 transition hover:bg-zinc-100"
+            className="flex w-full items-center justify-center gap-3 rounded-xl border border-white/[0.08] bg-white py-3 text-[13px] font-semibold text-zinc-900 transition-gpu hover:bg-zinc-100"
           >
-            <svg className="h-5 w-5" viewBox="0 0 24 24">
+            <svg className="h-4 w-4" viewBox="0 0 24 24">
               <path
                 d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
                 fill="#4285F4"
@@ -38,9 +44,12 @@ export default function LoginPage() {
                 fill="#EA4335"
               />
             </svg>
-            Iniciar sesión con Google
+            Sign in with Google
           </button>
         </form>
+        <p className="text-center text-[11px] text-zinc-600">
+          Only @andgather.co accounts
+        </p>
       </div>
     </div>
   );

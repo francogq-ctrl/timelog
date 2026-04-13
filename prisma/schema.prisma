@@ -129,10 +129,10 @@ model WorkType {
 }
 
 model Activity {
-  id       String   @id @default(cuid())
-  category Category
-  name     String
-  active   Boolean  @default(true)
+  id        String  @id @default(cuid())
+  category  String
+  name      String
+  active    Boolean @default(true)
   sortOrder Int     @default(0)
 
   timeEntries TimeEntry[]

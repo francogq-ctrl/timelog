@@ -47,3 +47,66 @@ export async function fetchTasks(
   const json = await res.json();
   return json.data as AsanaTaskResponse[];
 }
+
+// ── Audit-specific functions ──
+
+async function fetchAllPages<T>(initialUrl: string): Promise<T[]> {
+  const results: T[] = [];
+  let nextUrl: string | null = initialUrl;
+
+  while (nextUrl) {
+    const response: Response = await fetch(nextUrl, { headers: headers() });
+    if (!response.ok) throw new Error(`Asana API error: ${response.status}`);
+    const json = await response.json();
+    results.push(...(json.data as T[]));
+    nextUrl = json.next_page?.uri ?? null;
+  }
+
+  return results;
+}
+
+export interface AsanaSectionResponse {
+  gid: string;
+  name: string;
+}
+
+export interface AsanaCustomField {
+  gid: string;
+  name: string;
+  display_value: string | null;
+  type: string;
+}
+
+export interface AsanaTaskDetailed {
+  gid: string;
+  name: string;
+  completed: boolean;
+  assignee: { name: string } | null;
+  created_by: { name: string } | null;
+  due_on: string | null;
+  custom_fields: AsanaCustomField[];
+  memberships: { section: { gid: string; name: string } }[];
+  modified_at: string;
+  created_at: string;
+}
+
+export async function fetchSections(
+  projectGid: string
+): Promise<AsanaSectionResponse[]> {
+  const res = await fetch(
+    `${ASANA_BASE}/projects/${projectGid}/sections?opt_fields=name`,
+    { headers: headers() }
+  );
+  if (!res.ok) throw new Error(`Asana API error: ${res.status}`);
+
+  const json = await res.json();
+  return json.data as AsanaSectionResponse[];
+}
+
+export async function fetchTasksDetailed(
+  projectGid: string
+): Promise<AsanaTaskDetailed[]> {
+  return fetchAllPages<AsanaTaskDetailed>(
+    `${ASANA_BASE}/projects/${projectGid}/tasks?opt_fields=name,completed,assignee.name,created_by.name,due_on,custom_fields,memberships.section.name,modified_at,created_at&limit=100`
+  );
+}

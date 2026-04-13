@@ -2,51 +2,52 @@
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { format, addDays, subDays, startOfWeek, isToday, isSameDay } from "date-fns";
-import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 
 interface DateNavigatorProps {
   currentDate: Date;
   onDateChange: (date: Date) => void;
+  /** Number of hours logged per day of the week [Mon..Sun] */
+  weekHours?: number[];
 }
 
-const dayLabels = ["L", "M", "M", "J", "V", "S", "D"];
+const dayLabels = ["M", "T", "W", "T", "F", "S", "S"];
 
-export function DateNavigator({ currentDate, onDateChange }: DateNavigatorProps) {
+export function DateNavigator({ currentDate, onDateChange, weekHours }: DateNavigatorProps) {
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
   return (
-    <div className="space-y-4">
-      {/* Date header with arrows */}
+    <div className="space-y-3">
+      {/* Date header */}
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm text-zinc-500">
-            {isToday(currentDate) ? "Hoy" : format(currentDate, "EEEE", { locale: es })}
+          <p className="text-[13px] font-medium text-zinc-500">
+            {isToday(currentDate) ? "Today" : format(currentDate, "EEEE")}
           </p>
-          <h2 className="text-xl font-semibold text-white">
-            {format(currentDate, "d 'de' MMMM", { locale: es })}
+          <h2 className="text-lg font-semibold tracking-tight text-white">
+            {format(currentDate, "MMMM d")}
           </h2>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-1">
           <button
             onClick={() => onDateChange(subDays(currentDate, 1))}
-            className="rounded-lg bg-zinc-800/50 p-2 text-zinc-400 transition hover:bg-zinc-800 hover:text-white"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-500 transition-gpu hover:bg-white/[0.06] hover:text-white"
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
           {!isToday(currentDate) && (
             <button
               onClick={() => onDateChange(new Date())}
-              className="rounded-lg bg-zinc-800/50 px-3 py-2 text-xs text-zinc-400 transition hover:bg-zinc-800 hover:text-white"
+              className="rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-zinc-500 transition-gpu hover:bg-white/[0.06] hover:text-white"
             >
-              Hoy
+              Today
             </button>
           )}
           <button
             onClick={() => onDateChange(addDays(currentDate, 1))}
             disabled={isToday(currentDate)}
-            className="rounded-lg bg-zinc-800/50 p-2 text-zinc-400 transition hover:bg-zinc-800 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-500 transition-gpu hover:bg-white/[0.06] hover:text-white disabled:opacity-20 disabled:cursor-not-allowed"
           >
             <ChevronRight className="h-4 w-4" />
           </button>
@@ -54,25 +55,38 @@ export function DateNavigator({ currentDate, onDateChange }: DateNavigatorProps)
       </div>
 
       {/* Week bar */}
-      <div className="flex justify-center gap-1.5">
+      <div className="flex justify-between gap-1">
         {weekDays.map((day, i) => {
           const isSelected = isSameDay(day, currentDate);
           const isFuture = day > new Date();
+          const dayHours = weekHours?.[i] ?? 0;
+          const hasEntries = dayHours > 0;
+
           return (
             <button
               key={i}
               disabled={isFuture}
               onClick={() => onDateChange(day)}
               className={cn(
-                "flex h-9 w-9 items-center justify-center rounded-lg text-xs font-medium transition",
+                "group relative flex flex-1 flex-col items-center gap-1 rounded-xl py-2 text-[11px] font-medium transition-gpu",
                 isSelected
-                  ? "bg-lime-400/15 border border-lime-400/30 text-lime-400"
+                  ? "bg-white/[0.08] text-white"
                   : isFuture
-                  ? "bg-zinc-800/30 text-zinc-600 cursor-not-allowed"
-                  : "bg-zinc-800/50 text-zinc-400 hover:bg-zinc-800 hover:text-white"
+                  ? "text-zinc-700 cursor-not-allowed"
+                  : "text-zinc-500 hover:bg-white/[0.04] hover:text-zinc-300"
               )}
             >
-              {dayLabels[i]}
+              <span>{dayLabels[i]}</span>
+              <span className={cn(
+                "font-mono text-[10px]",
+                isSelected ? "text-lime-400" : hasEntries ? "text-zinc-400" : "text-zinc-700"
+              )}>
+                {hasEntries ? `${dayHours}h` : "\u00B7"}
+              </span>
+              {/* Active indicator */}
+              {isSelected && (
+                <div className="absolute -bottom-0.5 h-0.5 w-4 rounded-full bg-lime-400" />
+              )}
             </button>
           );
         })}

@@ -2,14 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Clock, BarChart3, Settings, LogOut } from "lucide-react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Clock, BarChart3, Settings, ShieldCheck, LogOut, ChevronDown } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
 
@@ -25,7 +18,8 @@ interface AppShellProps {
 
 const navItems = [
   { href: "/log", label: "Log", icon: Clock },
-  { href: "/reports", label: "Reportes", icon: BarChart3, roles: ["MANAGER", "ADMIN"] },
+  { href: "/reports", label: "Reports", icon: BarChart3, roles: ["MANAGER", "ADMIN"] },
+  { href: "/audit", label: "Audit", icon: ShieldCheck, roles: ["ADMIN"] },
   { href: "/admin", label: "Admin", icon: Settings, roles: ["ADMIN"] },
 ];
 
@@ -36,16 +30,28 @@ export function AppShell({ children, user }: AppShellProps) {
     (item) => !item.roles || item.roles.includes(user.role)
   );
 
+  const initials = user.name
+    ?.split(" ")
+    .map((n) => n[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase() ?? "?";
+
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="flex min-h-screen flex-col bg-[#0a0a0b]">
       {/* Header */}
-      <header className="sticky top-0 z-50 border-b border-zinc-800 bg-zinc-950/80 backdrop-blur-sm">
-        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
-          <div className="flex items-center gap-6">
-            <Link href="/log" className="text-lg font-bold text-white">
-              TimeLog
+      <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-[#0a0a0b]/90 backdrop-blur-xl">
+        <div className="mx-auto flex h-14 max-w-2xl items-center justify-between px-4">
+          <div className="flex items-center gap-5">
+            <Link href="/log" className="flex items-center gap-2.5">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-lime-400/10">
+                <Clock className="h-3.5 w-3.5 text-lime-400" />
+              </div>
+              <span className="text-[15px] font-semibold tracking-tight text-white">
+                TimeLog
+              </span>
             </Link>
-            <nav className="flex items-center gap-1">
+            <nav className="flex items-center gap-0.5">
               {visibleNav.map((item) => {
                 const Icon = item.icon;
                 const isActive = pathname.startsWith(item.href);
@@ -54,13 +60,13 @@ export function AppShell({ children, user }: AppShellProps) {
                     key={item.href}
                     href={item.href}
                     className={cn(
-                      "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition",
+                      "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium transition-gpu",
                       isActive
-                        ? "bg-zinc-800 text-white"
-                        : "text-zinc-400 hover:bg-zinc-800/50 hover:text-white"
+                        ? "bg-white/[0.08] text-white"
+                        : "text-zinc-500 hover:bg-white/[0.04] hover:text-zinc-300"
                     )}
                   >
-                    <Icon className="h-4 w-4" />
+                    <Icon className="h-3.5 w-3.5" />
                     {item.label}
                   </Link>
                 );
@@ -68,31 +74,34 @@ export function AppShell({ children, user }: AppShellProps) {
             </nav>
           </div>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-zinc-400 transition hover:bg-zinc-800/50">
-              <Avatar className="h-7 w-7">
-                <AvatarImage src={user.image ?? undefined} />
-                <AvatarFallback className="bg-zinc-800 text-xs">
-                  {user.name?.charAt(0)?.toUpperCase() ?? "?"}
-                </AvatarFallback>
-              </Avatar>
-              <span className="hidden sm:inline">{user.name}</span>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem
+          {/* User menu */}
+          <div className="relative group">
+            <button className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-[13px] text-zinc-500 transition-gpu hover:bg-white/[0.04] hover:text-zinc-300">
+              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-white/[0.08] text-[10px] font-semibold text-zinc-300">
+                {initials}
+              </div>
+              <span className="hidden sm:inline">{user.name?.split(" ")[0]}</span>
+              <ChevronDown className="h-3 w-3 opacity-50" />
+            </button>
+            <div className="invisible absolute right-0 top-full z-50 mt-1 w-48 rounded-xl border border-white/[0.08] bg-[#141416] p-1 opacity-0 shadow-2xl transition-all group-hover:visible group-hover:opacity-100">
+              <div className="px-3 py-2 text-[11px] text-zinc-500">
+                {user.email}
+              </div>
+              <div className="h-px bg-white/[0.06]" />
+              <button
                 onClick={() => signOut({ callbackUrl: "/login" })}
-                className="text-red-400"
+                className="mt-1 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-[13px] text-red-400 transition-gpu hover:bg-red-400/10"
               >
-                <LogOut className="mr-2 h-4 w-4" />
-                Cerrar sesión
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                <LogOut className="h-3.5 w-3.5" />
+                Sign out
+              </button>
+            </div>
+          </div>
         </div>
       </header>
 
       {/* Main content */}
-      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6">
+      <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-6">
         {children}
       </main>
     </div>

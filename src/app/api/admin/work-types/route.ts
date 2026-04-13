@@ -42,3 +42,19 @@ export async function PATCH(req: NextRequest) {
   });
   return NextResponse.json(workType);
 }
+
+export async function DELETE(req: NextRequest) {
+  const session = await requireAdmin();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id } = await req.json();
+  const count = await prisma.timeEntry.count({ where: { workTypeId: id } });
+  if (count > 0) {
+    return NextResponse.json(
+      { error: `Cannot delete: ${count} time entries use this work type.` },
+      { status: 409 }
+    );
+  }
+  await prisma.workType.delete({ where: { id } });
+  return NextResponse.json({ success: true });
+}

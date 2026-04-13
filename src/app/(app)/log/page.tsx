@@ -1,17 +1,12 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { format } from "date-fns";
-import { Plus } from "lucide-react";
+import { format, startOfWeek } from "date-fns";
+import { Plus, Clock, ChevronDown } from "lucide-react";
+import { useSession } from "next-auth/react";
 import { DateNavigator } from "@/components/date-navigator";
 import { EntryCard } from "@/components/entry-card";
 import { EntryForm } from "@/components/entry-form";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
 import { Category } from "@/generated/prisma/client";
 
 interface TimeEntry {
@@ -36,20 +31,43 @@ interface FormData {
   asanaProjects: { id: string; gid: string; name: string }[];
 }
 
+interface User {
+  id: string;
+  name: string | null;
+  email: string;
+}
+
 export default function LogPage() {
+  const { data: session } = useSession();
+  const isAdmin = session?.user?.role === "ADMIN";
+
   const [currentDate, setCurrentDate] = useState(new Date());
   const [entries, setEntries] = useState<TimeEntry[]>([]);
   const [formData, setFormData] = useState<FormData | null>(null);
-  const [sheetOpen, setSheetOpen] = useState(false);
+  const [showForm, setShowForm] = useState(false);
   const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null);
   const [loading, setLoading] = useState(true);
+  const [weekHours, setWeekHours] = useState<number[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [targetUserId, setTargetUserId] = useState<string | null>(null);
 
   const dateStr = format(currentDate, "yyyy-MM-dd");
+
+  // Fetch team members for admin selector
+  useEffect(() => {
+    if (!isAdmin) return;
+    fetch("/api/admin/users")
+      .then((r) => r.json())
+      .then((data: User[]) => setUsers(data))
+      .catch(() => {});
+  }, [isAdmin]);
 
   const fetchEntries = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/entries?date=${dateStr}`);
+      const params = new URLSearchParams({ date: dateStr });
+      if (isAdmin && targetUserId) params.set("userId", targetUserId);
+      const res = await fetch(`/api/entries?${params}`);
       const data = await res.json();
       setEntries(data);
     } catch {
@@ -57,7 +75,7 @@ export default function LogPage() {
     } finally {
       setLoading(false);
     }
-  }, [dateStr]);
+  }, [dateStr, isAdmin, targetUserId]);
 
   const fetchFormData = useCallback(async () => {
     try {
@@ -69,33 +87,66 @@ export default function LogPage() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchEntries();
-  }, [fetchEntries]);
+  // Fetch week hours in a single request
+  const fetchWeekHours = useCallback(async () => {
+    try {
+      const weekStart = format(startOfWeek(currentDate, { weekStartsOn: 1 }), "yyyy-MM-dd");
+      const params = new URLSearchParams({ weekStart });
+      if (isAdmin && targetUserId) params.set("userId", targetUserId);
+      const res = await fetch(`/api/entries/week?${params}`);
+      const data = await res.json();
+      setWeekHours(data);
+    } catch {
+      // Silently fail
+    }
+  }, [currentDate, isAdmin, targetUserId]);
 
+  useEffect(() => { fetchEntries(); }, [fetchEntries]);
+  useEffect(() => { fetchFormData(); }, [fetchFormData]);
+  useEffect(() => { fetchWeekHours(); }, [fetchWeekHours]);
+
+  // Keyboard shortcut: N to open form
   useEffect(() => {
-    fetchFormData();
-  }, [fetchFormData]);
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "n" && !showForm && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || e.target instanceof HTMLTextAreaElement)) {
+        e.preventDefault();
+        handleAdd();
+      }
+      if (e.key === "Escape" && showForm) {
+        setShowForm(false);
+        setEditingEntry(null);
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [showForm]);
 
   const totalHours = entries.reduce((sum, e) => sum + e.hours, 0);
 
+  // Category breakdown
+  const categoryHours = entries.reduce((acc, e) => {
+    acc[e.category] = (acc[e.category] || 0) + e.hours;
+    return acc;
+  }, {} as Record<string, number>);
+
   function handleAdd() {
     setEditingEntry(null);
-    setSheetOpen(true);
+    setShowForm(true);
   }
 
   function handleEdit(id: string) {
     const entry = entries.find((e) => e.id === id);
     if (entry) {
       setEditingEntry(entry);
-      setSheetOpen(true);
+      setShowForm(true);
     }
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("¿Eliminar esta entrada?")) return;
+    if (!confirm("Delete this entry?")) return;
     await fetch(`/api/entries/${id}`, { method: "DELETE" });
     fetchEntries();
+    fetchWeekHours();
   }
 
   async function handleSubmit(data: {
@@ -120,30 +171,111 @@ export default function LogPage() {
       await fetch("/api/entries", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...data, date: dateStr }),
+        body: JSON.stringify({
+          ...data,
+          date: dateStr,
+          ...(isAdmin && targetUserId ? { userId: targetUserId } : {}),
+        }),
       });
     }
-    setSheetOpen(false);
+    setShowForm(false);
+    setEditingEntry(null);
     fetchEntries();
+    fetchWeekHours();
   }
 
+  const categoryBarColors: Record<string, string> = {
+    CLIENT_WORK: "bg-lime-400",
+    INTERNAL: "bg-violet-400",
+    ADMIN: "bg-amber-400",
+    TRAINING: "bg-blue-400",
+  };
+
+  const selectedUser = users.find((u) => u.id === targetUserId);
+
   return (
-    <div className="mx-auto max-w-lg space-y-6">
-      <DateNavigator currentDate={currentDate} onDateChange={setCurrentDate} />
+    <div className="mx-auto max-w-lg space-y-5">
+      {/* Admin: user selector */}
+      {isAdmin && users.length > 0 && (
+        <div className="flex items-center gap-2 rounded-xl border border-white/[0.06] bg-[#141416] px-4 py-3">
+          <span className="text-[12px] text-zinc-500 shrink-0">Logging for</span>
+          <div className="relative flex-1">
+            <select
+              value={targetUserId ?? ""}
+              onChange={(e) => {
+                setTargetUserId(e.target.value || null);
+                setShowForm(false);
+                setEditingEntry(null);
+              }}
+              className="w-full appearance-none bg-transparent text-[13px] font-medium text-white outline-none cursor-pointer pr-5"
+            >
+              <option value="">myself</option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name ?? u.email}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
+          </div>
+          {selectedUser && (
+            <button
+              onClick={() => { setTargetUserId(null); setShowForm(false); setEditingEntry(null); }}
+              className="text-[11px] text-zinc-600 hover:text-zinc-400 shrink-0"
+            >
+              clear
+            </button>
+          )}
+        </div>
+      )}
+
+      <DateNavigator
+        currentDate={currentDate}
+        onDateChange={setCurrentDate}
+        weekHours={weekHours}
+      />
+
+      {/* Daily summary bar */}
+      {entries.length > 0 && (
+        <div className="flex items-center gap-3 rounded-xl border border-white/[0.06] bg-[#141416] px-4 py-3">
+          <div className="flex items-center gap-2 flex-1">
+            <Clock className="h-3.5 w-3.5 text-zinc-500" />
+            <span className="text-[13px] text-zinc-400">
+              {entries.length} {entries.length === 1 ? "entry" : "entries"}
+            </span>
+            {/* Mini category breakdown bar */}
+            <div className="ml-2 flex h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.04]">
+              {Object.entries(categoryHours).map(([cat, hrs]) => (
+                <div
+                  key={cat}
+                  className={`${categoryBarColors[cat] ?? "bg-zinc-500"} opacity-60`}
+                  style={{ width: `${(hrs / totalHours) * 100}%` }}
+                />
+              ))}
+            </div>
+          </div>
+          <span className="font-mono text-lg font-semibold text-white tabular-nums">
+            {totalHours}<span className="text-[13px] text-zinc-500 font-normal">h</span>
+          </span>
+        </div>
+      )}
 
       {/* Entries list */}
-      <div className="space-y-3">
+      <div className="space-y-2 stagger-children">
         {loading ? (
-          <div className="py-12 text-center text-sm text-zinc-500">
-            Cargando...
+          <div className="py-16 text-center">
+            <div className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-zinc-700 border-t-lime-400" />
           </div>
-        ) : entries.length === 0 ? (
-          <div className="py-12 text-center">
-            <p className="text-sm text-zinc-500">
-              No hay entradas para este día
+        ) : entries.length === 0 && !showForm ? (
+          <div className="py-16 text-center">
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/[0.04]">
+              <Clock className="h-5 w-5 text-zinc-600" />
+            </div>
+            <p className="text-[14px] font-medium text-zinc-400">
+              No entries yet
             </p>
-            <p className="mt-1 text-xs text-zinc-600">
-              Agregá tu primera entrada del día
+            <p className="mt-1 text-[12px] text-zinc-600">
+              Press <kbd className="rounded border border-white/[0.1] bg-white/[0.04] px-1.5 py-0.5 font-mono text-[11px] text-zinc-400">N</kbd> or tap the button below
             </p>
           </div>
         ) : (
@@ -158,60 +290,43 @@ export default function LogPage() {
         )}
       </div>
 
-      {/* Total bar */}
-      {entries.length > 0 && (
-        <div className="flex items-center justify-between rounded-xl border border-lime-400/20 bg-lime-400/5 px-4 py-3">
-          <span className="text-sm text-zinc-400">Total del día</span>
-          <span className="text-2xl font-bold text-lime-400">{totalHours}h</span>
-        </div>
+      {/* Inline form */}
+      {showForm && formData && (
+        <EntryForm
+          initialData={
+            editingEntry
+              ? {
+                  category: editingEntry.category,
+                  clientName: editingEntry.clientName ?? undefined,
+                  asanaProjectId: editingEntry.asanaProjectId ?? undefined,
+                  asanaTaskId: editingEntry.asanaTaskId ?? undefined,
+                  asanaTaskName: editingEntry.asanaTaskName ?? undefined,
+                  workTypeId: editingEntry.workTypeId ?? undefined,
+                  activityId: editingEntry.activityId ?? undefined,
+                  description: editingEntry.description ?? undefined,
+                  hours: editingEntry.hours,
+                  notes: editingEntry.notes ?? undefined,
+                }
+              : undefined
+          }
+          workTypes={formData.workTypes}
+          activities={formData.activities}
+          asanaProjects={formData.asanaProjects}
+          onSubmit={handleSubmit}
+          onCancel={() => { setShowForm(false); setEditingEntry(null); }}
+        />
       )}
 
       {/* Add button */}
-      <button
-        onClick={handleAdd}
-        className="flex w-full items-center justify-center gap-2 rounded-xl bg-lime-400 py-3.5 text-sm font-semibold text-zinc-900 transition hover:bg-lime-300"
-      >
-        <Plus className="h-4 w-4" />
-        Agregar entrada
-      </button>
-
-      {/* Entry form sheet */}
-      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent side="bottom" className="h-[90vh] overflow-y-auto bg-zinc-950 border-zinc-800">
-          <SheetHeader>
-            <SheetTitle className="text-white">
-              {editingEntry ? "Editar entrada" : "Nueva entrada"}
-            </SheetTitle>
-          </SheetHeader>
-          {formData && (
-            <div className="mt-4 pb-8">
-              <EntryForm
-                initialData={
-                  editingEntry
-                    ? {
-                        category: editingEntry.category,
-                        clientName: editingEntry.clientName ?? undefined,
-                        asanaProjectId: editingEntry.asanaProjectId ?? undefined,
-                        asanaTaskId: editingEntry.asanaTaskId ?? undefined,
-                        asanaTaskName: editingEntry.asanaTaskName ?? undefined,
-                        workTypeId: editingEntry.workTypeId ?? undefined,
-                        activityId: editingEntry.activityId ?? undefined,
-                        description: editingEntry.description ?? undefined,
-                        hours: editingEntry.hours,
-                        notes: editingEntry.notes ?? undefined,
-                      }
-                    : undefined
-                }
-                workTypes={formData.workTypes}
-                activities={formData.activities}
-                asanaProjects={formData.asanaProjects}
-                onSubmit={handleSubmit}
-                onCancel={() => setSheetOpen(false)}
-              />
-            </div>
-          )}
-        </SheetContent>
-      </Sheet>
+      {!showForm && (
+        <button
+          onClick={handleAdd}
+          className="group flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-white/[0.1] py-3.5 text-[13px] font-medium text-zinc-500 transition-gpu hover:border-lime-400/30 hover:bg-lime-400/5 hover:text-lime-400"
+        >
+          <Plus className="h-4 w-4 transition-gpu group-hover:rotate-90" />
+          Log Time
+        </button>
+      )}
     </div>
   );
 }

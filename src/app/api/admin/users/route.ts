@@ -41,3 +41,16 @@ export async function PATCH(req: NextRequest) {
   });
   return NextResponse.json(user);
 }
+
+export async function DELETE(req: NextRequest) {
+  const session = await requireAdmin();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id } = await req.json();
+  if (id === session.user.id) {
+    return NextResponse.json({ error: "Cannot delete your own account" }, { status: 400 });
+  }
+
+  await prisma.user.delete({ where: { id } });
+  return NextResponse.json({ success: true });
+}
