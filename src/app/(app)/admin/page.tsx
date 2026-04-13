@@ -556,7 +556,7 @@ export default function AdminPage() {
               </Button>
             )}
             <p className="text-xs text-zinc-500">
-              Also runs automatically every 5 minutes.
+              Also runs automatically daily at 3:50 PM UTC.
             </p>
           </div>
 

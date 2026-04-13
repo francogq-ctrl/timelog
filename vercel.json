@@ -3,7 +3,7 @@
   "crons": [
     {
       "path": "/api/asana/sync",
-      "schedule": "*/5 * * * *"
+      "schedule": "50 15 * * *"
     }
   ]
 }
