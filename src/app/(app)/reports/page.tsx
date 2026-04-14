@@ -339,13 +339,16 @@ export default function ReportsPage() {
     TRAINING: "Training",
   };
 
-  const CLIENT_COLORS = [
-    "bg-lime-400",
-    "bg-blue-400",
-    "bg-green-400",
-    "bg-orange-400",
-    "bg-purple-400",
-    "bg-red-400",
+  // Use hex colors with inline styles — Tailwind JIT purges dynamically-constructed class names
+  const CLIENT_COLORS_HEX = [
+    "#a3e635", // lime-400
+    "#60a5fa", // blue-400
+    "#34d399", // emerald-400
+    "#fb923c", // orange-400
+    "#c084fc", // purple-400
+    "#f87171", // red-400
+    "#facc15", // yellow-400
+    "#22d3ee", // cyan-400
   ];
 
   const totalHours = data?.overview.totalHours ?? 0;
@@ -868,14 +871,14 @@ export default function ReportsPage() {
                     const maxHours = data.byClient[0]?.hours ?? 1;
                     return data.byClient.map((c, index) => {
                       const pct = (c.hours / maxHours) * 100;
-                      const colorClass = CLIENT_COLORS[index % CLIENT_COLORS.length];
+                      const colorHex = CLIENT_COLORS_HEX[index % CLIENT_COLORS_HEX.length];
                       return (
                         <div key={c.name} className="flex items-center gap-3">
                           <span className="w-32 shrink-0 truncate text-[13px] text-zinc-400" title={c.name}>{c.name}</span>
                           <div className="flex-1 h-7 rounded-md bg-white/[0.03] overflow-hidden">
                             <div
-                              className={cn("h-full rounded-md flex items-center transition-all", colorClass + "/70")}
-                              style={{ width: `${Math.max(pct, 4)}%` }}
+                              className="h-full rounded-md flex items-center transition-all"
+                              style={{ width: `${Math.max(pct, 4)}%`, backgroundColor: colorHex + "b3" }}
                             >
                               <span className="pl-2 text-[12px] font-semibold text-[#0a0a0b] whitespace-nowrap">
                                 {c.hours}h

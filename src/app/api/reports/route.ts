@@ -2,6 +2,9 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 
+/** Round to 2 decimal places to avoid floating point accumulation errors */
+const r2 = (n: number) => Math.round(n * 100) / 100;
+
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id || !["MANAGER", "ADMIN"].includes(session.user.role)) {
@@ -40,10 +43,10 @@ export async function GET(req: NextRequest) {
   ]);
 
   // Overview
-  const totalHours = entries.reduce((sum, e) => sum + e.hours, 0);
-  const clientHours = entries
+  const totalHours = r2(entries.reduce((sum, e) => sum + e.hours, 0));
+  const clientHours = r2(entries
     .filter((e) => e.category === "CLIENT_WORK")
-    .reduce((sum, e) => sum + e.hours, 0);
+    .reduce((sum, e) => sum + e.hours, 0));
   const usersWithEntries = new Set(entries.map((e) => e.userId));
   const uniqueClients = new Set(
     entries.filter((e) => e.clientName).map((e) => e.clientName)
@@ -79,11 +82,11 @@ export async function GET(req: NextRequest) {
         byCategory: {},
       };
     }
-    complianceMap[uid].hours += e.hours;
+    complianceMap[uid].hours = r2(complianceMap[uid].hours + e.hours);
     complianceMap[uid].entries += 1;
     complianceMap[uid].daysActive.add(e.date.toISOString().split("T")[0]);
     complianceMap[uid].byCategory[e.category] =
-      (complianceMap[uid].byCategory[e.category] ?? 0) + e.hours;
+      r2((complianceMap[uid].byCategory[e.category] ?? 0) + e.hours);
   }
 
   const compliance = Object.values(complianceMap)
@@ -114,11 +117,11 @@ export async function GET(req: NextRequest) {
     const key = e.clientName;
     if (!byClientMap[key])
       byClientMap[key] = { hours: 0, byType: {}, people: new Set() };
-    byClientMap[key].hours += e.hours;
+    byClientMap[key].hours = r2(byClientMap[key].hours + e.hours);
     byClientMap[key].people.add(e.userId);
     const typeName = e.workType?.name ?? "Other";
     byClientMap[key].byType[typeName] =
-      (byClientMap[key].byType[typeName] ?? 0) + e.hours;
+      r2((byClientMap[key].byType[typeName] ?? 0) + e.hours);
   }
 
   const byClient = Object.entries(byClientMap)
@@ -151,12 +154,12 @@ export async function GET(req: NextRequest) {
         entries: 0,
         byType: {},
       };
-    byDeliverableMap[key].hours += e.hours;
+    byDeliverableMap[key].hours = r2(byDeliverableMap[key].hours + e.hours);
     byDeliverableMap[key].people.add(e.userId);
     byDeliverableMap[key].entries += 1;
     const typeName = e.workType?.name ?? "Other";
     byDeliverableMap[key].byType[typeName] =
-      (byDeliverableMap[key].byType[typeName] ?? 0) + e.hours;
+      r2((byDeliverableMap[key].byType[typeName] ?? 0) + e.hours);
   }
 
   const byDeliverable = Object.values(byDeliverableMap)
@@ -174,7 +177,7 @@ export async function GET(req: NextRequest) {
   // Category totals
   const categoryTotals: Record<string, number> = {};
   for (const e of entries) {
-    categoryTotals[e.category] = (categoryTotals[e.category] ?? 0) + e.hours;
+    categoryTotals[e.category] = r2((categoryTotals[e.category] ?? 0) + e.hours);
   }
 
   // Work type totals
@@ -182,7 +185,7 @@ export async function GET(req: NextRequest) {
   for (const e of entries) {
     if (e.category === "CLIENT_WORK" && e.workType) {
       workTypeTotals[e.workType.name] =
-        (workTypeTotals[e.workType.name] ?? 0) + e.hours;
+        r2((workTypeTotals[e.workType.name] ?? 0) + e.hours);
     }
   }
 
