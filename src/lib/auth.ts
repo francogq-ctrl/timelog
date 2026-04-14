@@ -31,7 +31,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       });
       return true;
     },
-    async jwt({ token, user }) {
+    async jwt({ token, user, account }) {
+      // On every sign-in, update stored OAuth tokens so scope changes persist.
+      // NextAuth's PrismaAdapter does not refresh stored tokens for existing accounts.
+      if (account?.provider === "google" && account.access_token) {
+        await prisma.account.updateMany({
+          where: {
+            provider: "google",
+            providerAccountId: account.providerAccountId,
+          },
+          data: {
+            access_token: account.access_token,
+            ...(account.refresh_token ? { refresh_token: account.refresh_token } : {}),
+            ...(account.expires_at ? { expires_at: account.expires_at } : {}),
+            ...(account.scope ? { scope: account.scope } : {}),
+            ...(account.id_token ? { id_token: account.id_token } : {}),
+          },
+        });
+      }
+
       if (user?.email) {
         const dbUser = await prisma.user.findUnique({
           where: { email: user.email },
