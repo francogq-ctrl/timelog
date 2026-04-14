@@ -3,7 +3,7 @@
   "crons": [
     {
       "path": "/api/asana/sync",
-      "schedule": "30 21 * * *"
+      "schedule": "*/5 * * * *"
     },
     {
       "path": "/api/cron/log-reminder",
