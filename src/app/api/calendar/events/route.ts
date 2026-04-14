@@ -21,12 +21,10 @@ async function getValidAccessToken(
 ): Promise<string | null> {
   const now = Math.floor(Date.now() / 1000);
 
-  // Token still valid (with 5 min buffer)
   if (account.access_token && account.expires_at && account.expires_at > now + 300) {
     return account.access_token;
   }
 
-  // Try to refresh
   if (!account.refresh_token) return account.access_token;
 
   try {
@@ -47,7 +45,6 @@ async function getValidAccessToken(
     const newToken = data.access_token as string;
     const expiresAt = Math.floor(Date.now() / 1000) + (data.expires_in as number);
 
-    // Update stored token in background
     prisma.account
       .updateMany({
         where: { userId, provider: "google" },
@@ -61,6 +58,19 @@ async function getValidAccessToken(
   }
 }
 
+/** Match event title against known client names. Returns the client name if found. */
+function detectClient(title: string, clientNames: string[]): string | null {
+  const lowerTitle = title.toLowerCase();
+  // Sort by length descending so longer names match first (e.g. "Acme Corp" before "Acme")
+  const sorted = [...clientNames].sort((a, b) => b.length - a.length);
+  for (const name of sorted) {
+    if (lowerTitle.includes(name.toLowerCase())) {
+      return name;
+    }
+  }
+  return null;
+}
+
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -72,11 +82,23 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Date required" }, { status: 400 });
   }
 
-  // Get Google account tokens
-  const account = await prisma.account.findFirst({
-    where: { userId: session.user.id, provider: "google" },
-    select: { access_token: true, refresh_token: true, expires_at: true },
-  });
+  // Fetch tokens, known clients, and Meeting work type in parallel
+  const [account, clientRows, meetingWorkType] = await Promise.all([
+    prisma.account.findFirst({
+      where: { userId: session.user.id, provider: "google" },
+      select: { access_token: true, refresh_token: true, expires_at: true },
+    }),
+    prisma.timeEntry.findMany({
+      where: { clientName: { not: null } },
+      select: { clientName: true },
+      distinct: ["clientName"],
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.workType.findFirst({
+      where: { name: { equals: "Meeting", mode: "insensitive" }, active: true },
+      select: { id: true, name: true },
+    }),
+  ]);
 
   if (!account) {
     return NextResponse.json({ error: "No Google account linked" }, { status: 400 });
@@ -90,7 +112,11 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // Build time range for the entire day
+  const clientNames = clientRows
+    .map((r) => r.clientName!)
+    .filter(Boolean);
+
+  // Fetch Google Calendar events
   const dayStart = new Date(`${date}T00:00:00`);
   const dayEnd = new Date(`${date}T23:59:59`);
 
@@ -109,7 +135,6 @@ export async function GET(req: NextRequest) {
 
   if (!gcalRes.ok) {
     if (gcalRes.status === 401 || gcalRes.status === 403) {
-      // Likely missing calendar scope — user needs to re-auth
       return NextResponse.json(
         {
           error: "calendar_scope_missing",
@@ -125,7 +150,6 @@ export async function GET(req: NextRequest) {
   const gcalData = await gcalRes.json();
   const items: GoogleCalendarEvent[] = gcalData.items ?? [];
 
-  // Only keep timed events (not all-day), non-cancelled
   const timedEvents = items.filter(
     (e) => e.start?.dateTime && e.end?.dateTime && e.status !== "cancelled"
   );
@@ -134,37 +158,39 @@ export async function GET(req: NextRequest) {
     return NextResponse.json([]);
   }
 
-  // Check which event IDs are already logged as time entries
+  // Check which events are already logged
   const eventIds = timedEvents.map((e) => e.id);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const existingEntries = await (prisma.timeEntry as any).findMany({
-    where: {
-      userId: session.user.id,
-      calendarEventId: { in: eventIds },
-    },
+    where: { userId: session.user.id, calendarEventId: { in: eventIds } },
     select: { calendarEventId: true },
   });
   const loggedIds = new Set<string>(
     existingEntries.map((e: { calendarEventId: string }) => e.calendarEventId)
   );
 
-  // Shape and return
   const result = timedEvents
     .map((e) => {
       const start = new Date(e.start.dateTime!);
       const end = new Date(e.end.dateTime!);
       const durationMinutes = (end.getTime() - start.getTime()) / 60000;
-      // Round to nearest 0.25h, minimum 0.25
       const hours = Math.max(0.25, Math.round(durationMinutes / 15) * 0.25);
+
+      const title = e.summary ?? "(No title)";
+      const matchedClient = detectClient(title, clientNames);
 
       return {
         id: e.id,
-        title: e.summary ?? "(No title)",
+        title,
         start: e.start.dateTime,
         end: e.end.dateTime,
         hours,
         attendeesCount: e.attendees?.length ?? 0,
         alreadyLogged: loggedIds.has(e.id),
+        // Suggested entry fields
+        suggestedCategory: matchedClient ? "CLIENT_WORK" : "INTERNAL",
+        suggestedClientName: matchedClient ?? null,
+        meetingWorkTypeId: meetingWorkType?.id ?? null,
       };
     })
     .filter((e) => e.hours > 0);

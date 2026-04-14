@@ -12,6 +12,9 @@ interface CalendarEvent {
   hours: number;
   attendeesCount: number;
   alreadyLogged: boolean;
+  suggestedCategory: "CLIENT_WORK" | "INTERNAL";
+  suggestedClientName: string | null;
+  meetingWorkTypeId: string | null;
 }
 
 interface CalendarImportProps {
@@ -95,20 +98,27 @@ export function CalendarImport({ date, onImported }: CalendarImportProps) {
     const toImport = events.filter((e) => selected.has(e.id) && !e.alreadyLogged);
 
     const results = await Promise.allSettled(
-      toImport.map((e) =>
-        fetch("/api/entries", {
+      toImport.map((e) => {
+        const isClient = e.suggestedCategory === "CLIENT_WORK" && e.suggestedClientName;
+        return fetch("/api/entries", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             date: dateStr,
-            category: "INTERNAL",
-            description: e.title,
+            category: e.suggestedCategory,
+            // Client Work fields
+            ...(isClient ? {
+              clientName: e.suggestedClientName,
+              workTypeId: e.meetingWorkTypeId ?? undefined,
+            } : {}),
+            // Internal fields
+            ...(!isClient ? { description: e.title } : {}),
             hours: e.hours,
             notes: `Imported from Google Calendar (${formatTime(e.start)} – ${formatTime(e.end)})`,
             calendarEventId: e.id,
           }),
-        })
-      )
+        });
+      })
     );
 
     const succeeded = results.filter((r) => r.status === "fulfilled").length;
@@ -260,11 +270,27 @@ export function CalendarImport({ date, onImported }: CalendarImportProps) {
                                 </span>
                               )}
                             </p>
-                            {isLogged && (
-                              <span className="inline-flex items-center gap-1 mt-1 text-[10px] text-zinc-600">
-                                <Check className="h-2.5 w-2.5" /> Already logged
-                              </span>
-                            )}
+                            <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                              {event.suggestedCategory === "CLIENT_WORK" && event.suggestedClientName ? (
+                                <span className="inline-flex items-center rounded-md bg-lime-400/10 px-1.5 py-0.5 text-[10px] font-medium text-lime-400">
+                                  {event.suggestedClientName}
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center rounded-md bg-violet-400/10 px-1.5 py-0.5 text-[10px] font-medium text-violet-400">
+                                  Internal
+                                </span>
+                              )}
+                              {event.meetingWorkTypeId && event.suggestedCategory === "CLIENT_WORK" && (
+                                <span className="inline-flex items-center rounded-md bg-white/[0.05] px-1.5 py-0.5 text-[10px] text-zinc-500">
+                                  Meeting
+                                </span>
+                              )}
+                              {isLogged && (
+                                <span className="inline-flex items-center gap-1 text-[10px] text-zinc-600">
+                                  <Check className="h-2.5 w-2.5" /> Already logged
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </button>
