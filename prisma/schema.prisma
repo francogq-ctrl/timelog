@@ -95,6 +95,9 @@ model TimeEntry {
   hours Float
   notes String?
 
+  // Calendar import
+  calendarEventId String? @unique
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

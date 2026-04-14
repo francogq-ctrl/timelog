@@ -62,7 +62,28 @@ export async function POST(req: NextRequest) {
   const isAdmin = session.user.role === "ADMIN";
   const targetUserId = isAdmin && data.userId ? data.userId : session.user.id;
 
-  const entry = await prisma.timeEntry.create({
+  // Handle workTypeId as array or string
+  const workTypeId = Array.isArray(data.workTypeId)
+    ? data.workTypeId.join(",")
+    : data.workTypeId || null;
+
+  // If importing from calendar, check for duplicate
+  if (data.calendarEventId) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const existing = await (prisma.timeEntry as any).findFirst({
+      where: { calendarEventId: data.calendarEventId },
+      select: { id: true },
+    });
+    if (existing) {
+      return NextResponse.json(
+        { error: "This calendar event has already been logged" },
+        { status: 409 }
+      );
+    }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const entry = await (prisma.timeEntry as any).create({
     data: {
       userId: targetUserId,
       date: entryDate,
@@ -71,11 +92,12 @@ export async function POST(req: NextRequest) {
       asanaProjectId: data.asanaProjectId || null,
       asanaTaskId: data.asanaTaskId || null,
       asanaTaskName: data.asanaTaskName || null,
-      workTypeId: data.workTypeId || null,
+      workTypeId,
       activityId: data.activityId || null,
       description: data.description || null,
       hours: data.hours,
       notes: data.notes || null,
+      calendarEventId: data.calendarEventId || null,
     },
   });
 

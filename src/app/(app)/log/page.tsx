@@ -7,6 +7,7 @@ import { useSession } from "next-auth/react";
 import { DateNavigator } from "@/components/date-navigator";
 import { EntryCard } from "@/components/entry-card";
 import { EntryForm } from "@/components/entry-form";
+import { CalendarImport } from "@/components/calendar-import";
 import { Category } from "@/generated/prisma/client";
 
 interface TimeEntry {
@@ -155,7 +156,7 @@ export default function LogPage() {
     asanaProjectId?: string;
     asanaTaskId?: string;
     asanaTaskName?: string;
-    workTypeId?: string;
+    workTypeId?: string | string[];
     activityId?: string;
     description?: string;
     hours: number;
@@ -317,15 +318,27 @@ export default function LogPage() {
         />
       )}
 
-      {/* Add button */}
+      {/* Add button + Calendar import */}
       {!showForm && (
-        <button
-          onClick={handleAdd}
-          className="group flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-white/[0.1] py-3.5 text-[13px] font-medium text-zinc-500 transition-gpu hover:border-lime-400/30 hover:bg-lime-400/5 hover:text-lime-400"
-        >
-          <Plus className="h-4 w-4 transition-gpu group-hover:rotate-90" />
-          Log Time
-        </button>
+        <div className="space-y-2">
+          <button
+            onClick={handleAdd}
+            className="group flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-white/[0.1] py-3.5 text-[13px] font-medium text-zinc-500 transition-gpu hover:border-lime-400/30 hover:bg-lime-400/5 hover:text-lime-400"
+          >
+            <Plus className="h-4 w-4 transition-gpu group-hover:rotate-90" />
+            Log Time
+          </button>
+          {/* Only show calendar import for own entries (not when admin is logging for others) */}
+          {!(isAdmin && targetUserId) && (
+            <CalendarImport
+              date={currentDate}
+              onImported={() => {
+                fetchEntries();
+                fetchWeekHours();
+              }}
+            />
+          )}
+        </div>
       )}
     </div>
   );
