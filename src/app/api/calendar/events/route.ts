@@ -11,13 +11,31 @@ interface GoogleCalendarEvent {
   status?: string;
 }
 
+// Hardcoded client detection map.
+// Each entry: keywords to match (case-insensitive) → canonical client name used in entries.
+const CLIENT_MAP: Array<{ patterns: string[]; name: string }> = [
+  { patterns: ["bodi"],                            name: "BODi" },
+  { patterns: ["myprize", "my prize"],             name: "MyPrize" },
+  { patterns: ["h2tab"],                           name: "H2tab" },
+  { patterns: ["veloci"],                          name: "Veloci" },
+  { patterns: ["morphe"],                          name: "Morphe" },
+  { patterns: ["promix"],                          name: "Promix" },
+  { patterns: ["goodwipes"],                       name: "Goodwipes" },
+  { patterns: ["hygienelab", "hygiene lab"],       name: "HygieneLab" },
+  { patterns: ["the normal brand", "normalbrand"], name: "The Normal Brand" },
+];
+
+function detectClient(title: string): string | null {
+  const lower = title.toLowerCase();
+  for (const { patterns, name } of CLIENT_MAP) {
+    if (patterns.some((p) => lower.includes(p))) return name;
+  }
+  return null;
+}
+
 async function getValidAccessToken(
   userId: string,
-  account: {
-    access_token: string | null;
-    refresh_token: string | null;
-    expires_at: number | null;
-  }
+  account: { access_token: string | null; refresh_token: string | null; expires_at: number | null }
 ): Promise<string | null> {
   const now = Math.floor(Date.now() / 1000);
 
@@ -58,19 +76,6 @@ async function getValidAccessToken(
   }
 }
 
-/** Match event title against known client names. Returns the client name if found. */
-function detectClient(title: string, clientNames: string[]): string | null {
-  const lowerTitle = title.toLowerCase();
-  // Sort by length descending so longer names match first (e.g. "Acme Corp" before "Acme")
-  const sorted = [...clientNames].sort((a, b) => b.length - a.length);
-  for (const name of sorted) {
-    if (lowerTitle.includes(name.toLowerCase())) {
-      return name;
-    }
-  }
-  return null;
-}
-
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -82,21 +87,19 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Date required" }, { status: 400 });
   }
 
-  // Fetch tokens, known clients, and Meeting work type in parallel
-  const [account, clientRows, meetingWorkType] = await Promise.all([
+  // Fetch tokens, Asana projects cache, and Meeting work type in parallel
+  const [account, asanaProjects, meetingWorkType] = await Promise.all([
     prisma.account.findFirst({
       where: { userId: session.user.id, provider: "google" },
       select: { access_token: true, refresh_token: true, expires_at: true },
     }),
-    prisma.timeEntry.findMany({
-      where: { clientName: { not: null } },
-      select: { clientName: true },
-      distinct: ["clientName"],
-      orderBy: { createdAt: "desc" },
+    prisma.asanaProject.findMany({
+      where: { active: true },
+      select: { gid: true, name: true },
     }),
     prisma.workType.findFirst({
       where: { name: { equals: "Meeting", mode: "insensitive" }, active: true },
-      select: { id: true, name: true },
+      select: { id: true },
     }),
   ]);
 
@@ -112,9 +115,14 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const clientNames = clientRows
-    .map((r) => r.clientName!)
-    .filter(Boolean);
+  // Build Asana project lookup: clientName → gid (match project whose name contains client name)
+  const projectByClient = new Map<string, string>();
+  for (const { patterns, name } of CLIENT_MAP) {
+    const project = asanaProjects.find((p) =>
+      patterns.some((pat) => p.name.toLowerCase().includes(pat))
+    );
+    if (project) projectByClient.set(name, project.gid);
+  }
 
   // Fetch Google Calendar events
   const dayStart = new Date(`${date}T00:00:00`);
@@ -154,9 +162,7 @@ export async function GET(req: NextRequest) {
     (e) => e.start?.dateTime && e.end?.dateTime && e.status !== "cancelled"
   );
 
-  if (timedEvents.length === 0) {
-    return NextResponse.json([]);
-  }
+  if (timedEvents.length === 0) return NextResponse.json([]);
 
   // Check which events are already logged
   const eventIds = timedEvents.map((e) => e.id);
@@ -175,9 +181,10 @@ export async function GET(req: NextRequest) {
       const end = new Date(e.end.dateTime!);
       const durationMinutes = (end.getTime() - start.getTime()) / 60000;
       const hours = Math.max(0.25, Math.round(durationMinutes / 15) * 0.25);
-
       const title = e.summary ?? "(No title)";
-      const matchedClient = detectClient(title, clientNames);
+
+      const clientName = detectClient(title);
+      const asanaProjectId = clientName ? (projectByClient.get(clientName) ?? null) : null;
 
       return {
         id: e.id,
@@ -187,9 +194,9 @@ export async function GET(req: NextRequest) {
         hours,
         attendeesCount: e.attendees?.length ?? 0,
         alreadyLogged: loggedIds.has(e.id),
-        // Suggested entry fields
-        suggestedCategory: matchedClient ? "CLIENT_WORK" : "INTERNAL",
-        suggestedClientName: matchedClient ?? null,
+        suggestedCategory: clientName ? "CLIENT_WORK" : "INTERNAL",
+        suggestedClientName: clientName,
+        suggestedAsanaProjectId: asanaProjectId,
         meetingWorkTypeId: meetingWorkType?.id ?? null,
       };
     })

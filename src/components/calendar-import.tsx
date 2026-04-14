@@ -14,6 +14,7 @@ interface CalendarEvent {
   alreadyLogged: boolean;
   suggestedCategory: "CLIENT_WORK" | "INTERNAL";
   suggestedClientName: string | null;
+  suggestedAsanaProjectId: string | null;
   meetingWorkTypeId: string | null;
 }
 
@@ -109,6 +110,7 @@ export function CalendarImport({ date, onImported }: CalendarImportProps) {
             // Client Work fields
             ...(isClient ? {
               clientName: e.suggestedClientName,
+              asanaProjectId: e.suggestedAsanaProjectId ?? undefined,
               workTypeId: e.meetingWorkTypeId ?? undefined,
             } : {}),
             // Internal fields
