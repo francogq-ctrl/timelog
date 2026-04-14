@@ -7,7 +7,7 @@ const { auth } = NextAuth(authConfig);
 export default auth((req) => {
   const { pathname } = req.nextUrl;
 
-  if (pathname.startsWith("/login") || pathname.startsWith("/api/auth") || pathname.startsWith("/api/health") || pathname.startsWith("/api/asana/sync")) {
+  if (pathname.startsWith("/login") || pathname.startsWith("/api/auth") || pathname.startsWith("/api/health") || pathname.startsWith("/api/asana/sync") || pathname.startsWith("/api/cron/")) {
     return NextResponse.next();
   }
 
