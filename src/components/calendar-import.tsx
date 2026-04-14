@@ -3,7 +3,6 @@
 import { useState, useCallback } from "react";
 import { format } from "date-fns";
 import { CalendarDays, Check, Loader2, X, AlertCircle } from "lucide-react";
-import { Category } from "@/generated/prisma/client";
 
 interface CalendarEvent {
   id: string;
@@ -102,7 +101,7 @@ export function CalendarImport({ date, onImported }: CalendarImportProps) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             date: dateStr,
-            category: Category.INTERNAL,
+            category: "INTERNAL",
             description: e.title,
             hours: e.hours,
             notes: `Imported from Google Calendar (${formatTime(e.start)} – ${formatTime(e.end)})`,
