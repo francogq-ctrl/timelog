@@ -54,7 +54,7 @@ interface EntryFormProps {
 const categories = [
   { value: "CLIENT_WORK" as Category, label: "Client", icon: "🎯", color: "lime" },
   { value: "INTERNAL" as Category, label: "Internal", icon: "⚡", color: "violet" },
-  { value: "ADMIN" as Category, label: "Admin", icon: "📋", color: "amber" },
+  { value: "ADMIN" as Category, label: "Admin / OPS", icon: "📋", color: "amber" },
   { value: "TRAINING" as Category, label: "Training", icon: "📚", color: "blue" },
 ];
 
@@ -97,9 +97,13 @@ export function EntryForm({
   const [selectedTask, setSelectedTask] = useState(
     initialData?.asanaTaskId ?? ""
   );
-  const [selectedWorkType, setSelectedWorkType] = useState(
-    initialData?.workTypeId ?? ""
-  );
+  const [selectedWorkType, setSelectedWorkType] = useState<string>(() => {
+    const raw = initialData?.workTypeId;
+    if (!raw) return "";
+    // Back-compat: legacy entries may have been stored as "id1,id2" — take the first
+    if (typeof raw === "string") return raw.includes(",") ? raw.split(",")[0] : raw;
+    return "";
+  });
   const [selectedActivity, setSelectedActivity] = useState(
     initialData?.activityId ?? ""
   );
@@ -149,7 +153,7 @@ export function EntryForm({
             ? selectedTaskObj?.name || undefined
             : undefined,
         workTypeId:
-          category === "CLIENT_WORK" ? selectedWorkType || undefined : undefined,
+          category === "CLIENT_WORK" ? (selectedWorkType || undefined) : undefined,
         activityId:
           category !== "CLIENT_WORK" ? selectedActivity || undefined : undefined,
         description:
@@ -256,7 +260,9 @@ export function EntryForm({
                 {workTypes.map((wt) => (
                   <button
                     key={wt.id}
-                    onClick={() => setSelectedWorkType(selectedWorkType === wt.id ? "" : wt.id)}
+                    onClick={() => {
+                      setSelectedWorkType((prev) => (prev === wt.id ? "" : wt.id));
+                    }}
                     className={cn(
                       "rounded-full border px-3 py-1.5 text-[12px] font-medium transition-gpu",
                       selectedWorkType === wt.id

@@ -20,6 +20,12 @@ export async function PATCH(
 
   const data = await req.json();
 
+  // workTypeId is a single FK to WorkType.id. If the client sends an array
+  // (legacy), coerce to the first value to avoid FK constraint violations.
+  const workTypeId = Array.isArray(data.workTypeId)
+    ? data.workTypeId[0] || null
+    : data.workTypeId || null;
+
   const updated = await prisma.timeEntry.update({
     where: { id },
     data: {
@@ -28,7 +34,7 @@ export async function PATCH(
       asanaProjectId: data.asanaProjectId || null,
       asanaTaskId: data.asanaTaskId || null,
       asanaTaskName: data.asanaTaskName || null,
-      workTypeId: data.workTypeId || null,
+      workTypeId,
       activityId: data.activityId || null,
       description: data.description || null,
       hours: data.hours,
