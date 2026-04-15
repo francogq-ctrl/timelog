@@ -62,9 +62,10 @@ export async function POST(req: NextRequest) {
   const isAdmin = session.user.role === "ADMIN";
   const targetUserId = isAdmin && data.userId ? data.userId : session.user.id;
 
-  // Handle workTypeId as array or string
+  // workTypeId is a single FK to WorkType.id. If the client sends an array
+  // (legacy), coerce to the first value to avoid FK constraint violations.
   const workTypeId = Array.isArray(data.workTypeId)
-    ? data.workTypeId.join(",")
+    ? data.workTypeId[0] || null
     : data.workTypeId || null;
 
   // If importing from calendar, check for duplicate

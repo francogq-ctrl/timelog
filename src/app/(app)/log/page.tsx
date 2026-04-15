@@ -51,6 +51,7 @@ export default function LogPage() {
   const [weekHours, setWeekHours] = useState<number[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [targetUserId, setTargetUserId] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const dateStr = format(currentDate, "yyyy-MM-dd");
 
@@ -162,27 +163,40 @@ export default function LogPage() {
     hours: number;
     notes?: string;
   }) {
-    if (editingEntry) {
-      await fetch(`/api/entries/${editingEntry.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-    } else {
-      await fetch("/api/entries", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...data,
-          date: dateStr,
-          ...(isAdmin && targetUserId ? { userId: targetUserId } : {}),
-        }),
-      });
+    setSubmitError(null);
+    try {
+      let res: Response;
+      if (editingEntry) {
+        res = await fetch(`/api/entries/${editingEntry.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data),
+        });
+      } else {
+        res = await fetch("/api/entries", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...data,
+            date: dateStr,
+            ...(isAdmin && targetUserId ? { userId: targetUserId } : {}),
+          }),
+        });
+      }
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        setSubmitError(errorData.error || `Error: ${res.status} ${res.statusText}`);
+        return;
+      }
+
+      setShowForm(false);
+      setEditingEntry(null);
+      fetchEntries();
+      fetchWeekHours();
+    } catch (err) {
+      setSubmitError("Failed to submit entry. Please check your connection and try again.");
     }
-    setShowForm(false);
-    setEditingEntry(null);
-    fetchEntries();
-    fetchWeekHours();
   }
 
   const categoryBarColors: Record<string, string> = {
@@ -290,6 +304,13 @@ export default function LogPage() {
           ))
         )}
       </div>
+
+      {/* Error message */}
+      {submitError && (
+        <div className="rounded-xl border border-red-500/30 bg-red-500/5 px-4 py-3">
+          <p className="text-[13px] text-red-400">{submitError}</p>
+        </div>
+      )}
 
       {/* Inline form */}
       {showForm && formData && (
