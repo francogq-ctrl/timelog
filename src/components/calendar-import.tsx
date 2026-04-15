@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { format } from "date-fns";
 import { CalendarDays, Check, Loader2, X, AlertCircle, RefreshCw } from "lucide-react";
-import { signOut } from "next-auth/react";
 
 interface CalendarEvent {
   id: string;
@@ -36,6 +35,7 @@ export function CalendarImport({ date, onImported }: CalendarImportProps) {
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
 
   const dateStr = format(date, "yyyy-MM-dd");
 
@@ -91,6 +91,37 @@ export function CalendarImport({ date, onImported }: CalendarImportProps) {
       }
       return next;
     });
+  }
+
+  function handleReconnect() {
+    setReconnecting(true);
+    const popup = window.open(
+      "/api/auth/calendar-connect",
+      "calendar_connect",
+      "width=500,height=600,left=400,top=200"
+    );
+
+    function onMessage(e: MessageEvent) {
+      if (e.origin !== window.location.origin) return;
+      if (e.data === "calendar_connected") {
+        window.removeEventListener("message", onMessage);
+        clearInterval(interval);
+        setReconnecting(false);
+        setError(null);
+        fetchEvents();
+      }
+    }
+
+    window.addEventListener("message", onMessage);
+
+    // Cleanup if popup closes without completing
+    const interval = setInterval(() => {
+      if (popup?.closed) {
+        clearInterval(interval);
+        window.removeEventListener("message", onMessage);
+        setReconnecting(false);
+      }
+    }, 1000);
   }
 
   async function handleImport() {
@@ -192,16 +223,21 @@ export function CalendarImport({ date, onImported }: CalendarImportProps) {
                   <div className="flex gap-3">
                     <AlertCircle className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
                     <div className="flex-1">
-                      <p className="text-[13px] font-medium text-amber-300">Calendar reconnect needed</p>
+                      <p className="text-[13px] font-medium text-amber-300">Calendar access needs refresh</p>
                       <p className="text-[12px] text-zinc-400 mt-1 mb-3">
-                        Your Google Calendar access needs to be refreshed. Click below — you'll be back in 10 seconds.
+                        One-time reconnect to update your Google Calendar. It only takes 10 seconds, and you'll be back here automatically.
                       </p>
                       <button
-                        onClick={() => signOut({ callbackUrl: "/log" })}
-                        className="flex items-center gap-2 rounded-lg bg-amber-500/20 border border-amber-500/30 px-3 py-1.5 text-[12px] font-medium text-amber-300 hover:bg-amber-500/30 transition-colors"
+                        onClick={handleReconnect}
+                        disabled={reconnecting}
+                        className="flex items-center gap-2 rounded-lg bg-amber-500 border border-amber-500 px-3 py-2 text-[12px] font-medium text-white hover:bg-amber-600 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
                       >
-                        <RefreshCw className="h-3 w-3" />
-                        Sign out & reconnect
+                        {reconnecting ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <RefreshCw className="h-3.5 w-3.5" />
+                        )}
+                        {reconnecting ? "Reconnecting..." : "Reconnect now"}
                       </button>
                     </div>
                   </div>
