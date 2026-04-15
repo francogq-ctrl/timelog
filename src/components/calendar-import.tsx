@@ -2,7 +2,8 @@
 
 import { useState, useCallback } from "react";
 import { format } from "date-fns";
-import { CalendarDays, Check, Loader2, X, AlertCircle } from "lucide-react";
+import { CalendarDays, Check, Loader2, X, AlertCircle, RefreshCw } from "lucide-react";
+import { signOut } from "next-auth/react";
 
 interface CalendarEvent {
   id: string;
@@ -46,7 +47,7 @@ export function CalendarImport({ date, onImported }: CalendarImportProps) {
       const res = await fetch(`/api/calendar/events?date=${dateStr}`);
       const data = await res.json();
       if (!res.ok) {
-        if (data.error === "calendar_scope_missing") {
+        if (data.error === "calendar_scope_missing" || data.error === "token_expired") {
           setError("reauth");
         } else {
           setError(data.message ?? data.error ?? "Failed to load calendar events");
@@ -190,11 +191,18 @@ export function CalendarImport({ date, onImported }: CalendarImportProps) {
                 <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
                   <div className="flex gap-3">
                     <AlertCircle className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
-                    <div>
-                      <p className="text-[13px] font-medium text-amber-300">Calendar access needed</p>
-                      <p className="text-[12px] text-zinc-400 mt-1">
-                        Sign out and back in to grant Google Calendar access. This only happens once.
+                    <div className="flex-1">
+                      <p className="text-[13px] font-medium text-amber-300">Calendar reconnect needed</p>
+                      <p className="text-[12px] text-zinc-400 mt-1 mb-3">
+                        Your Google Calendar access needs to be refreshed. Click below — you'll be back in 10 seconds.
                       </p>
+                      <button
+                        onClick={() => signOut({ callbackUrl: "/log" })}
+                        className="flex items-center gap-2 rounded-lg bg-amber-500/20 border border-amber-500/30 px-3 py-1.5 text-[12px] font-medium text-amber-300 hover:bg-amber-500/30 transition-colors"
+                      >
+                        <RefreshCw className="h-3 w-3" />
+                        Sign out & reconnect
+                      </button>
                     </div>
                   </div>
                 </div>

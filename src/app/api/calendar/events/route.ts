@@ -110,7 +110,7 @@ export async function GET(req: NextRequest) {
   const accessToken = await getValidAccessToken(session.user.id, account);
   if (!accessToken) {
     return NextResponse.json(
-      { error: "Could not get a valid Google token. Please sign out and back in." },
+      { error: "token_expired", message: "Your calendar token expired. Please sign out and back in." },
       { status: 401 }
     );
   }
@@ -142,13 +142,15 @@ export async function GET(req: NextRequest) {
   );
 
   if (!gcalRes.ok) {
-    if (gcalRes.status === 401 || gcalRes.status === 403) {
+    if (gcalRes.status === 401) {
       return NextResponse.json(
-        {
-          error: "calendar_scope_missing",
-          message:
-            "Calendar access not authorized. Please sign out and sign in again to grant calendar access.",
-        },
+        { error: "token_expired", message: "Your calendar token expired. Please reconnect." },
+        { status: 401 }
+      );
+    }
+    if (gcalRes.status === 403) {
+      return NextResponse.json(
+        { error: "calendar_scope_missing", message: "Calendar access not authorized." },
         { status: 403 }
       );
     }
