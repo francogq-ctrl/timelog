@@ -14,6 +14,7 @@ import {
   ChevronDown,
   Check,
   FileSpreadsheet,
+  FileText,
   Upload,
 } from "lucide-react";
 import * as XLSX from "xlsx";
@@ -262,6 +263,198 @@ export default function ReportsPage() {
     }
   }
 
+  function exportHTML() {
+    if (!data) return;
+    const { from, to } = getDateRange();
+    const generatedAt = new Date().toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
+    const totalHrs = data.overview.totalHours;
+
+    const catColors: Record<string, string> = {
+      CLIENT_WORK: "#84cc16",
+      INTERNAL: "#a78bfa",
+      ADMIN: "#fbbf24",
+      TRAINING: "#60a5fa",
+    };
+    const catLabels: Record<string, string> = {
+      CLIENT_WORK: "Client Work",
+      INTERNAL: "Internal",
+      ADMIN: "Admin",
+      TRAINING: "Training",
+    };
+    const clientColorHex = ["#84cc16","#60a5fa","#34d399","#fb923c","#c084fc","#f87171","#facc15","#22d3ee"];
+
+    const zeroUsers = data.compliance.filter((p) => p.hours === 0);
+    const lowUsers = data.compliance.filter((p) => p.hours > 0 && p.entries < 3);
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Time Report · ${from} to ${to}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f9fafb;color:#111827;line-height:1.5}
+.page{max-width:860px;margin:0 auto;padding:48px 32px}
+.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:40px;border-bottom:2px solid #e5e7eb;padding-bottom:24px}
+.header h1{font-size:28px;font-weight:700;letter-spacing:-0.5px}
+.header .subtitle{font-size:14px;color:#6b7280;margin-top:4px}
+.header-right{text-align:right}
+.period-badge{font-size:13px;font-weight:600;color:#374151;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:6px;padding:6px 12px;display:inline-block}
+.generated{font-size:11px;color:#9ca3af;margin-top:6px}
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:32px}
+.kpi{background:white;border:1px solid #e5e7eb;border-radius:12px;padding:20px}
+.kpi-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#9ca3af;margin-bottom:8px}
+.kpi-value{font-size:28px;font-weight:700;font-variant-numeric:tabular-nums;color:#111827}
+.kpi-value.accent{color:#65a30d}
+.kpi-value.warn{color:#d97706}
+.alerts{margin-bottom:32px;display:flex;flex-direction:column;gap:10px}
+.alert{display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border-radius:10px;font-size:13px}
+.alert.green{background:#f0fdf4;border:1px solid #bbf7d0;color:#15803d}
+.alert.red{background:#fef2f2;border:1px solid #fecaca;color:#dc2626}
+.alert.amber{background:#fffbeb;border:1px solid #fde68a;color:#d97706}
+.dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:5px}
+.dot-green{background:#22c55e}.dot-red{background:#ef4444}.dot-amber{background:#f59e0b}
+.alert strong{font-weight:600;display:block}
+.alert span{opacity:.8}
+.section{margin-bottom:32px;background:white;border:1px solid #e5e7eb;border-radius:14px;overflow:hidden}
+.section-header{padding:20px 24px 16px;border-bottom:1px solid #f3f4f6}
+.section-num{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#9ca3af;font-family:monospace;margin-bottom:2px}
+.section-title{font-size:17px;font-weight:700;color:#111827}
+.section-title em{font-style:normal;color:#65a30d}
+.section-body{padding:20px 24px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead th{padding:0 0 10px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#9ca3af;border-bottom:1px solid #f3f4f6}
+thead th.r{text-align:right}
+tbody tr{border-bottom:1px solid #f9fafb}
+tbody tr:last-child{border-bottom:none}
+tbody td{padding:10px 0;vertical-align:middle}
+td.r{text-align:right}td.mono{font-family:monospace}td.bold{font-weight:600}
+.badge{display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:600}
+.badge-green{background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0}
+.badge-red{background:#fef2f2;color:#dc2626;border:1px solid #fecaca}
+.badge-amber{background:#fffbeb;color:#d97706;border:1px solid #fde68a}
+.bar-row{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+.bar-label{width:140px;flex-shrink:0;font-size:13px;color:#6b7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar-track{flex:1;height:24px;background:#f3f4f6;border-radius:6px;overflow:hidden}
+.bar-fill{height:100%;border-radius:6px;display:flex;align-items:center;padding-left:8px;font-size:11px;font-weight:700;color:#1a1a1a}
+.bar-meta{width:60px;text-align:right;font-size:12px;font-family:monospace;color:#9ca3af}
+.cat-bar{display:flex;height:28px;border-radius:8px;overflow:hidden;margin-bottom:14px}
+.cat-seg{display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#1a1a1a}
+.cat-legend{display:flex;flex-wrap:wrap;gap:16px}
+.cat-item{display:flex;align-items:center;gap:6px;font-size:12px;color:#6b7280}
+.cat-dot{width:10px;height:10px;border-radius:50%}
+.footer{margin-top:48px;padding-top:24px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center}
+.footer p{font-size:12px;color:#9ca3af}
+</style>
+</head>
+<body>
+<div class="page">
+
+<div class="header">
+  <div>
+    <h1>Time Report</h1>
+    <p class="subtitle">Team hours and activity summary</p>
+  </div>
+  <div class="header-right">
+    <div class="period-badge">${from} → ${to}</div>
+    <p class="generated">Generated ${generatedAt}</p>
+  </div>
+</div>
+
+<div class="kpi-grid">
+  <div class="kpi"><div class="kpi-label">Total Hours</div><div class="kpi-value">${data.overview.totalHours}h</div></div>
+  <div class="kpi"><div class="kpi-label">Billable</div><div class="kpi-value ${data.overview.clientPercent >= 60 ? "accent" : data.overview.clientPercent < 40 ? "warn" : ""}">${data.overview.clientPercent}%</div></div>
+  <div class="kpi"><div class="kpi-label">Active Trackers</div><div class="kpi-value ${data.overview.activeUsers < data.overview.totalUsers ? "warn" : ""}">${data.overview.activeUsers}/${data.overview.totalUsers}</div></div>
+  <div class="kpi"><div class="kpi-label">Clients Served</div><div class="kpi-value">${data.overview.totalClients}</div></div>
+</div>
+
+<div class="alerts">
+  ${zeroUsers.length > 0 ? `<div class="alert red"><div class="dot dot-red"></div><div><strong>${zeroUsers.length} ${zeroUsers.length === 1 ? "person" : "people"} with no hours logged</strong><span>${zeroUsers.map((p) => p.name).join(", ")}</span></div></div>` : ""}
+  ${lowUsers.length > 0 ? `<div class="alert amber"><div class="dot dot-amber"></div><div><strong>${lowUsers.length} ${lowUsers.length === 1 ? "person" : "people"} with low activity (&lt; 3 entries)</strong><span>${lowUsers.map((p) => p.name).join(", ")}</span></div></div>` : ""}
+  ${zeroUsers.length === 0 && lowUsers.length === 0 ? `<div class="alert green"><div class="dot dot-green"></div><div><strong>All clear — everyone is tracking time properly.</strong></div></div>` : ""}
+</div>
+
+<div class="section">
+  <div class="section-header"><div class="section-num">01</div><div class="section-title">Tracking <em>Compliance</em></div></div>
+  <div class="section-body">
+    <table>
+      <thead><tr>
+        <th>Person</th><th class="r">Hours</th><th class="r">Entries</th><th class="r">Days Active</th><th class="r">Billable %</th><th class="r">Status</th>
+      </tr></thead>
+      <tbody>
+        ${data.compliance.map((p) => `<tr>
+          <td class="bold" style="color:${p.hours === 0 ? "#dc2626" : "#111827"}">${p.name}</td>
+          <td class="r mono">${p.hours}h</td>
+          <td class="r mono" style="color:#6b7280">${p.entries}</td>
+          <td class="r mono" style="color:#6b7280">${p.daysActive}</td>
+          <td class="r mono" style="color:${p.billablePercent >= 60 ? "#65a30d" : p.billablePercent >= 40 ? "#111827" : "#d97706"}">${p.billablePercent}%</td>
+          <td class="r">${p.hours === 0 ? '<span class="badge badge-red">No entries</span>' : p.entries < 3 ? '<span class="badge badge-amber">Low activity</span>' : '<span class="badge badge-green">Active</span>'}</td>
+        </tr>`).join("")}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+${data.byClient.length > 0 ? `<div class="section">
+  <div class="section-header"><div class="section-num">02</div><div class="section-title">Hours by <em>Client</em></div></div>
+  <div class="section-body">
+    ${data.byClient.map((c, i) => {
+      const maxHrs2 = data.byClient[0]?.hours ?? 1;
+      const pct = Math.max((c.hours / maxHrs2) * 100, 4);
+      const color = clientColorHex[i % clientColorHex.length];
+      const shareOfTotal = totalHrs > 0 ? ((c.hours / totalHrs) * 100).toFixed(1) : "0";
+      return `<div class="bar-row"><div class="bar-label" title="${c.name}">${c.name}</div><div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${color}cc">${c.hours}h</div></div><div class="bar-meta">${shareOfTotal}%</div></div>`;
+    }).join("")}
+  </div>
+</div>` : ""}
+
+${totalHrs > 0 ? `<div class="section">
+  <div class="section-header"><div class="section-num">03</div><div class="section-title">Category <em>Breakdown</em></div></div>
+  <div class="section-body">
+    <div class="cat-bar">
+      ${Object.entries(data.categoryTotals).map(([cat, hrs]) => {
+        const pct = (hrs / totalHrs) * 100;
+        const color = catColors[cat] ?? "#9ca3af";
+        return `<div class="cat-seg" style="width:${pct}%;background:${color}cc" title="${catLabels[cat] ?? cat}: ${hrs}h">${pct >= 10 ? `${Math.round(pct)}%` : ""}</div>`;
+      }).join("")}
+    </div>
+    <div class="cat-legend">
+      ${Object.entries(data.categoryTotals).map(([cat, hrs]) => `<div class="cat-item"><div class="cat-dot" style="background:${catColors[cat] ?? "#9ca3af"}"></div><span>${catLabels[cat] ?? cat}: <strong>${hrs}h</strong></span></div>`).join("")}
+    </div>
+  </div>
+</div>` : ""}
+
+${data.workTypeTotals.length > 0 ? `<div class="section">
+  <div class="section-header"><div class="section-num">04</div><div class="section-title">Work Type <em>Breakdown</em></div></div>
+  <div class="section-body">
+    ${data.workTypeTotals.map((wt) => {
+      const maxWt = data.workTypeTotals[0]?.hours ?? 1;
+      const pct = Math.max((wt.hours / maxWt) * 100, 4);
+      const shareOfBillable = data.overview.clientHours > 0 ? Math.round((wt.hours / data.overview.clientHours) * 100) : 0;
+      return `<div class="bar-row"><div class="bar-label">${wt.name}</div><div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:#a78bfacc">${wt.hours}h</div></div><div class="bar-meta">${shareOfBillable}%</div></div>`;
+    }).join("")}
+  </div>
+</div>` : ""}
+
+<div class="footer">
+  <p>Timelog · Internal Report</p>
+  <p>Generated ${generatedAt}</p>
+</div>
+
+</div>
+</body>
+</html>`;
+
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `timelog-report-${from}-to-${to}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -380,6 +573,14 @@ export default function ReportsPage() {
           >
             <FileSpreadsheet className="h-3.5 w-3.5" />
             {exporting ? "Exporting…" : "Export XLSX"}
+          </button>
+          <button
+            onClick={exportHTML}
+            disabled={!data}
+            className="flex items-center gap-2 rounded-lg border border-lime-400/20 bg-lime-400/5 px-3 py-2 text-[13px] font-medium text-lime-400 transition hover:bg-lime-400/10 disabled:opacity-40"
+          >
+            <FileText className="h-3.5 w-3.5" />
+            Share Report
           </button>
         </div>
       </div>
