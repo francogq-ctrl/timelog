@@ -349,7 +349,7 @@ export default function LogPage() {
             <Plus className="h-4 w-4 transition-gpu group-hover:rotate-90" />
             Log Time
           </button>
-          {session?.user?.email === "franco@andgather.co" && (
+          {isAdmin && (
             <CalendarImport date={currentDate} onImported={fetchEntries} />
           )}
         </div>
