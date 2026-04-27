@@ -34,6 +34,8 @@ interface User {
   email: string;
   role: string;
   active: boolean;
+  slackUserId: string | null;
+  weeklyContractHours: number;
 }
 
 interface AsanaProject {
@@ -213,6 +215,24 @@ export default function AdminPage() {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, active: !active }),
+    });
+    fetchAll();
+  }
+
+  async function updateUserSlackId(id: string, slackUserId: string) {
+    await fetch("/api/admin/users", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, slackUserId: slackUserId.trim() }),
+    });
+    fetchAll();
+  }
+
+  async function updateUserContractHours(id: string, hours: number) {
+    await fetch("/api/admin/users", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, weeklyContractHours: hours }),
     });
     fetchAll();
   }
@@ -570,42 +590,72 @@ export default function AdminPage() {
             {users.map((u) => (
               <div
                 key={u.id}
-                className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-3"
+                className="rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-3"
               >
-                <div className="min-w-0">
-                  <p className={cn("text-sm font-medium", !u.active && "text-zinc-500")}>
-                    {u.name || u.email}
-                  </p>
-                  <p className="text-xs text-zinc-500 truncate">{u.email}</p>
+                <div className="flex items-center justify-between">
+                  <div className="min-w-0">
+                    <p className={cn("text-sm font-medium", !u.active && "text-zinc-500")}>
+                      {u.name || u.email}
+                    </p>
+                    <p className="text-xs text-zinc-500 truncate">{u.email}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={u.role}
+                      onValueChange={(role) => role && updateUserRole(u.id, role)}
+                    >
+                      <SelectTrigger className="w-28 h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="MEMBER">Member</SelectItem>
+                        <SelectItem value="MANAGER">Manager</SelectItem>
+                        <SelectItem value="ADMIN">Admin</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Badge
+                      variant={u.active ? "default" : "secondary"}
+                      className="cursor-pointer"
+                      onClick={() => toggleUser(u.id, u.active)}
+                    >
+                      {u.active ? "Active" : "Inactive"}
+                    </Badge>
+                    <button
+                      onClick={() => deleteUser(u.id, u.name, u.email)}
+                      className="rounded-md p-1.5 text-zinc-600 transition hover:bg-red-500/10 hover:text-red-400"
+                      title="Delete user"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Select
-                    value={u.role}
-                    onValueChange={(role) => role && updateUserRole(u.id, role)}
-                  >
-                    <SelectTrigger className="w-28 h-8 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="MEMBER">Member</SelectItem>
-                      <SelectItem value="MANAGER">Manager</SelectItem>
-                      <SelectItem value="ADMIN">Admin</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Badge
-                    variant={u.active ? "default" : "secondary"}
-                    className="cursor-pointer"
-                    onClick={() => toggleUser(u.id, u.active)}
-                  >
-                    {u.active ? "Active" : "Inactive"}
-                  </Badge>
-                  <button
-                    onClick={() => deleteUser(u.id, u.name, u.email)}
-                    className="rounded-md p-1.5 text-zinc-600 transition hover:bg-red-500/10 hover:text-red-400"
-                    title="Delete user"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                <div className="mt-2 flex items-center gap-2">
+                  <Input
+                    defaultValue={u.slackUserId ?? ""}
+                    placeholder="Slack ID (e.g. U0XXXXXXX)"
+                    className="h-7 text-xs bg-zinc-900 border-zinc-800 flex-1"
+                    onBlur={(e) => {
+                      const v = e.target.value.trim();
+                      if (v !== (u.slackUserId ?? "")) updateUserSlackId(u.id, v);
+                    }}
+                  />
+                  <div className="flex items-center gap-1">
+                    <Input
+                      type="number"
+                      min={0}
+                      max={80}
+                      step={1}
+                      defaultValue={u.weeklyContractHours}
+                      className="h-7 text-xs bg-zinc-900 border-zinc-800 w-16"
+                      onBlur={(e) => {
+                        const v = parseInt(e.target.value, 10);
+                        if (!Number.isNaN(v) && v !== u.weeklyContractHours) {
+                          updateUserContractHours(u.id, v);
+                        }
+                      }}
+                    />
+                    <span className="text-xs text-zinc-500">h/wk</span>
+                  </div>
                 </div>
               </div>
             ))}
