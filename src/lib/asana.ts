@@ -38,14 +38,24 @@ export async function fetchProjects(): Promise<AsanaProjectResponse[]> {
 export async function fetchTasks(
   projectGid: string
 ): Promise<AsanaTaskResponse[]> {
-  const res = await fetch(
-    `${ASANA_BASE}/projects/${projectGid}/tasks?opt_fields=name,completed&limit=100`,
-    { headers: headers() }
+  return fetchAllPages<AsanaTaskResponse>(
+    `${ASANA_BASE}/projects/${projectGid}/tasks?opt_fields=name,completed&limit=100`
   );
-  if (!res.ok) throw new Error(`Asana API error: ${res.status}`);
+}
 
-  const json = await res.json();
-  return json.data as AsanaTaskResponse[];
+export async function updateTaskName(
+  taskGid: string,
+  name: string
+): Promise<void> {
+  const res = await fetch(`${ASANA_BASE}/tasks/${taskGid}`, {
+    method: "PUT",
+    headers: headers(),
+    body: JSON.stringify({ data: { name } }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Asana API error ${res.status}: ${body}`);
+  }
 }
 
 // ── Audit-specific functions ──
