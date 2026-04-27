@@ -26,6 +26,10 @@ import { NextRequest, NextResponse } from "next/server";
  *   - If SLACK_RECAP_SOFT_LAUNCH is set (comma-separated Slack user IDs),
  *     personal DMs only go to those IDs and the team channel post is skipped.
  *   - Leave unset for full broadcast.
+ *
+ * Dry run:
+ *   - Append ?dryRun=true to skip sending anything to Slack and instead
+ *     return the rendered messages as JSON. Useful for previewing.
  */
 async function handle(req: NextRequest) {
   const cronSecret = req.headers.get("authorization");
@@ -38,7 +42,10 @@ async function handle(req: NextRequest) {
     }
   }
 
-  if (!process.env.SLACK_BOT_TOKEN) {
+  const url = new URL(req.url);
+  const dryRun = url.searchParams.get("dryRun") === "true";
+
+  if (!dryRun && !process.env.SLACK_BOT_TOKEN) {
     return NextResponse.json(
       { error: "SLACK_BOT_TOKEN env var is not set" },
       { status: 400 },
@@ -71,6 +78,7 @@ async function handle(req: NextRequest) {
     slackId: string;
     ok: boolean;
     error?: string;
+    preview?: string;
   }> = [];
 
   for (const u of recipients) {
@@ -86,6 +94,15 @@ async function handle(req: NextRequest) {
       continue;
     }
     const text = formatPersonalRecap(data, referenceDate);
+    if (dryRun) {
+      personalResults.push({
+        userId: u.id,
+        slackId: u.slackUserId,
+        ok: true,
+        preview: text,
+      });
+      continue;
+    }
     const r = await postSlackMessage(u.slackUserId, text);
     personalResults.push({
       userId: u.id,
@@ -95,32 +112,39 @@ async function handle(req: NextRequest) {
     });
   }
 
-  let teamResult: { ok: boolean; error?: string; skipped?: boolean } = {
-    ok: false,
-    skipped: true,
-  };
-  if (!softLaunch) {
-    const teamData = await generateTeamRecap(referenceDate);
-    const teamText = formatTeamRecap(teamData);
+  const teamData = await generateTeamRecap(referenceDate);
+  const teamText = formatTeamRecap(teamData);
+
+  let teamResult: {
+    ok: boolean;
+    error?: string;
+    skipped?: boolean;
+    preview?: string;
+  } = { ok: false, skipped: true };
+
+  if (dryRun) {
+    teamResult = { ok: true, skipped: true, preview: teamText };
+  } else if (!softLaunch) {
     const r = await postSlackMessage(teamChannel, teamText);
     teamResult = r.ok ? { ok: true } : { ok: false, error: r.error };
   } else {
     for (const slackId of softLaunchIds) {
-      const teamData = await generateTeamRecap(referenceDate);
-      const teamText = `🧪 *[Soft-launch preview — would post to ${teamChannel}]*\n\n${formatTeamRecap(teamData)}`;
-      await postSlackMessage(slackId, teamText);
+      const previewText = `🧪 *[Soft-launch preview — would post to ${teamChannel}]*\n\n${teamText}`;
+      await postSlackMessage(slackId, previewText);
     }
     teamResult = { ok: true, skipped: true };
   }
 
   return NextResponse.json({
     ok: true,
+    dryRun,
     softLaunch,
     personal: {
       total: recipients.length,
-      sent: personalResults.filter((r) => r.ok).length,
+      sent: personalResults.filter((r) => r.ok && !r.preview).length,
       failed: personalResults.filter((r) => !r.ok).length,
-      failures: personalResults.filter((r) => !r.ok),
+      previewed: personalResults.filter((r) => r.preview).length,
+      results: personalResults,
     },
     team: teamResult,
     timestamp: new Date().toISOString(),
