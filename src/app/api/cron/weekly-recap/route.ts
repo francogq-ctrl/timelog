@@ -44,6 +44,16 @@ async function handle(req: NextRequest) {
 
   const url = new URL(req.url);
   const dryRun = url.searchParams.get("dryRun") === "true";
+  const weekOfParam = url.searchParams.get("weekOf");
+  const referenceDate = weekOfParam
+    ? new Date(`${weekOfParam}T12:00:00Z`)
+    : new Date();
+  if (weekOfParam && isNaN(referenceDate.getTime())) {
+    return NextResponse.json(
+      { error: "Invalid weekOf — expected YYYY-MM-DD" },
+      { status: 400 },
+    );
+  }
 
   if (!dryRun && !process.env.SLACK_BOT_TOKEN) {
     return NextResponse.json(
@@ -60,7 +70,6 @@ async function handle(req: NextRequest) {
   const softLaunch = softLaunchIds.length > 0;
 
   const teamChannel = process.env.SLACK_TEAM_CHANNEL ?? "#general";
-  const referenceDate = new Date();
 
   const usersWithSlack = await prisma.user.findMany({
     where: { active: true, slackUserId: { not: null } },
