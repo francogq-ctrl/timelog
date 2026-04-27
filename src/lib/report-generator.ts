@@ -14,7 +14,10 @@ const CLIENT_CANONICAL: Record<string, string> = {
 };
 
 export function normalizeClientName(name: string): string {
-  const stripped = name.replace(/\s*\[\d{4}\]\s*$/, "").trim();
+  let stripped = name.replace(/\s*\[\d{4}\]\s*$/, "").trim();
+  // Unwrap a single pair of enclosing brackets, e.g. "[Barker Wellness]" → "Barker Wellness"
+  const bracketed = stripped.match(/^\[(.+)\]$/);
+  if (bracketed) stripped = bracketed[1].trim();
   return CLIENT_CANONICAL[stripped.toLowerCase()] ?? stripped;
 }
 
