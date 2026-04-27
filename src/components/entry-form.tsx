@@ -56,6 +56,7 @@ const categories = [
   { value: "INTERNAL" as Category, label: "Internal", icon: "⚡", color: "violet" },
   { value: "ADMIN" as Category, label: "Admin / OPS", icon: "📋", color: "amber" },
   { value: "TRAINING" as Category, label: "Training", icon: "📚", color: "blue" },
+  { value: "TIME_OFF" as Category, label: "Time Off", icon: "🌴", color: "emerald" },
 ];
 
 const categoryStyles: Record<string, { active: string; inactive: string }> = {
@@ -73,6 +74,10 @@ const categoryStyles: Record<string, { active: string; inactive: string }> = {
   },
   blue: {
     active: "bg-blue-400/12 border-blue-400/30 text-blue-400",
+    inactive: "border-white/[0.06] text-zinc-500 hover:border-white/[0.1] hover:text-zinc-300",
+  },
+  emerald: {
+    active: "bg-emerald-400/12 border-emerald-400/30 text-emerald-400",
     inactive: "border-white/[0.06] text-zinc-500 hover:border-white/[0.1] hover:text-zinc-300",
   },
 };

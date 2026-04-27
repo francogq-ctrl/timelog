@@ -49,6 +49,9 @@ export function formatPersonalRecap(
   lines.push(
     `⏱ ${data.hoursLogged}h logged (out of ${data.hoursPossible}h possible)`,
   );
+  if (data.ptoHours > 0) {
+    lines.push(`🌴 ${data.ptoHours}h time off this week`);
+  }
   lines.push(
     `💼 ${data.billablePercent}% billable · ${data.internalPercent}% internal`,
   );
@@ -96,6 +99,9 @@ export function formatTeamRecap(data: TeamRecapData): string {
   lines.push(
     `   ${bar(data.utilizationPercent)}  ${data.utilizationPercent}% (${data.totalHours} / ${data.capacityHours}h available)`,
   );
+  if (data.ptoHours > 0) {
+    lines.push(`   🌴 ${data.ptoHours}h excluded for time off`);
+  }
   lines.push("   🎯 Goal: 100% week in, week out");
   lines.push("");
 

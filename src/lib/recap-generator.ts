@@ -20,6 +20,7 @@ export interface PersonalRecapData {
   weekEnd: Date;
   hoursLogged: number;
   hoursPossible: number;
+  ptoHours: number;
   billablePercent: number;
   internalPercent: number;
   streakDays: number;
@@ -36,6 +37,7 @@ export interface TeamRecapData {
   weekEnd: Date;
   totalHours: number;
   capacityHours: number;
+  ptoHours: number;
   utilizationPercent: number;
   byClient: { name: string; hours: number; percent: number }[];
   trainingHours: number;
@@ -88,22 +90,31 @@ export async function generatePersonalRecap(
     }),
   ]);
 
-  const hoursLogged = r2(thisWeek.reduce((s, e) => s + e.hours, 0));
+  const ptoHours = r2(
+    thisWeek.filter((e) => e.category === "TIME_OFF").reduce((s, e) => s + e.hours, 0),
+  );
+  const workEntries = thisWeek.filter((e) => e.category !== "TIME_OFF");
+  const hoursLogged = r2(workEntries.reduce((s, e) => s + e.hours, 0));
   const billableHours = r2(
-    thisWeek.filter((e) => e.category === "CLIENT_WORK").reduce((s, e) => s + e.hours, 0),
+    workEntries
+      .filter((e) => e.category === "CLIENT_WORK")
+      .reduce((s, e) => s + e.hours, 0),
   );
   const billablePercent = pct(billableHours, hoursLogged);
   const internalPercent = hoursLogged > 0 ? 100 - billablePercent : 0;
 
-  const fourWeekHours = r2(fourWeeks.reduce((s, e) => s + e.hours, 0));
+  const fourWeekWork = fourWeeks.filter((e) => e.category !== "TIME_OFF");
+  const fourWeekHours = r2(fourWeekWork.reduce((s, e) => s + e.hours, 0));
   const fourWeekBillable = r2(
-    fourWeeks.filter((e) => e.category === "CLIENT_WORK").reduce((s, e) => s + e.hours, 0),
+    fourWeekWork
+      .filter((e) => e.category === "CLIENT_WORK")
+      .reduce((s, e) => s + e.hours, 0),
   );
   const fourWeekAvgHours = r2(fourWeekHours / 4);
   const fourWeekAvgBillablePercent = pct(fourWeekBillable, fourWeekHours);
 
   const clientMap: Record<string, number> = {};
-  for (const e of thisWeek) {
+  for (const e of workEntries) {
     if (e.category !== "CLIENT_WORK" || !e.clientName) continue;
     const key = normalizeClientName(e.clientName);
     clientMap[key] = r2((clientMap[key] ?? 0) + e.hours);
@@ -143,7 +154,8 @@ export async function generatePersonalRecap(
     weekStart,
     weekEnd,
     hoursLogged,
-    hoursPossible: user.weeklyContractHours,
+    hoursPossible: Math.max(0, user.weeklyContractHours - ptoHours),
+    ptoHours,
     billablePercent,
     internalPercent,
     streakDays,
@@ -176,23 +188,32 @@ export async function generateTeamRecap(
     }),
   ]);
 
-  const totalHours = r2(entries.reduce((s, e) => s + e.hours, 0));
-  const capacityHours = activeUsers.reduce(
+  const ptoHours = r2(
+    entries.filter((e) => e.category === "TIME_OFF").reduce((s, e) => s + e.hours, 0),
+  );
+  const workEntries = entries.filter((e) => e.category !== "TIME_OFF");
+  const totalHours = r2(workEntries.reduce((s, e) => s + e.hours, 0));
+  const grossCapacity = activeUsers.reduce(
     (s, u) => s + u.weeklyContractHours,
     0,
   );
+  const capacityHours = Math.max(0, grossCapacity - ptoHours);
   const utilizationPercent = pct(totalHours, capacityHours);
 
   const billableHours = r2(
-    entries.filter((e) => e.category === "CLIENT_WORK").reduce((s, e) => s + e.hours, 0),
+    workEntries
+      .filter((e) => e.category === "CLIENT_WORK")
+      .reduce((s, e) => s + e.hours, 0),
   );
   const trainingHours = r2(
-    entries.filter((e) => e.category === "TRAINING").reduce((s, e) => s + e.hours, 0),
+    workEntries
+      .filter((e) => e.category === "TRAINING")
+      .reduce((s, e) => s + e.hours, 0),
   );
   const internalHours = r2(totalHours - billableHours);
 
   const clientMap: Record<string, number> = {};
-  for (const e of entries) {
+  for (const e of workEntries) {
     if (e.category !== "CLIENT_WORK" || !e.clientName) continue;
     const key = normalizeClientName(e.clientName);
     clientMap[key] = r2((clientMap[key] ?? 0) + e.hours);
@@ -210,6 +231,7 @@ export async function generateTeamRecap(
     weekEnd,
     totalHours,
     capacityHours,
+    ptoHours,
     utilizationPercent,
     byClient,
     trainingHours,

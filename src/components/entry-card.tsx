@@ -36,6 +36,14 @@ const categoryConfig = {
     bar: "bg-blue-400",
     icon: "📚",
   },
+  TIME_OFF: {
+    label: "Time Off",
+    color: "text-emerald-400",
+    bg: "bg-emerald-400/8",
+    border: "border-emerald-400/20",
+    bar: "bg-emerald-400",
+    icon: "🌴",
+  },
 };
 
 interface EntryCardProps {

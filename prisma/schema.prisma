@@ -118,6 +118,7 @@ enum Category {
   INTERNAL
   ADMIN
   TRAINING
+  TIME_OFF
 }
 
 // ─── Configurable Types ─────────────────────────────────────────────────────
