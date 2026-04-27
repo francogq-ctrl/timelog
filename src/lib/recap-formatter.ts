@@ -44,7 +44,7 @@ export function formatPersonalRecap(
   referenceDate: Date = new Date(),
 ): string {
   const lines: string[] = [];
-  lines.push(`👋 *Tu semana en Timelog* · ${formatRange(data.weekStart, data.weekEnd)}`);
+  lines.push(`👋 *Your Week at AND Gather* · ${formatRange(data.weekStart, data.weekEnd)}`);
   lines.push("");
   lines.push(
     `⏱ ${data.hoursLogged}h logged (out of ${data.hoursPossible}h possible)`,
