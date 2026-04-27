@@ -14,7 +14,16 @@ export async function GET() {
 
   const users = await prisma.user.findMany({
     orderBy: { name: "asc" },
-    select: { id: true, name: true, email: true, role: true, active: true, image: true },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      active: true,
+      image: true,
+      slackUserId: true,
+      weeklyContractHours: true,
+    },
   });
   return NextResponse.json(users);
 }
@@ -23,9 +32,15 @@ export async function POST(req: NextRequest) {
   const session = await requireAdmin();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { email, name, role } = await req.json();
+  const { email, name, role, slackUserId, weeklyContractHours } = await req.json();
   const user = await prisma.user.create({
-    data: { email, name, role: role || "MEMBER" },
+    data: {
+      email,
+      name,
+      role: role || "MEMBER",
+      ...(slackUserId !== undefined && { slackUserId: slackUserId || null }),
+      ...(weeklyContractHours !== undefined && { weeklyContractHours }),
+    },
   });
   return NextResponse.json(user, { status: 201 });
 }
@@ -34,10 +49,15 @@ export async function PATCH(req: NextRequest) {
   const session = await requireAdmin();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { id, role, active } = await req.json();
+  const { id, role, active, slackUserId, weeklyContractHours } = await req.json();
   const user = await prisma.user.update({
     where: { id },
-    data: { ...(role !== undefined && { role }), ...(active !== undefined && { active }) },
+    data: {
+      ...(role !== undefined && { role }),
+      ...(active !== undefined && { active }),
+      ...(slackUserId !== undefined && { slackUserId: slackUserId || null }),
+      ...(weeklyContractHours !== undefined && { weeklyContractHours }),
+    },
   });
   return NextResponse.json(user);
 }
