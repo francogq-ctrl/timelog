@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plus, RefreshCw, Check, X, Trash2 } from "lucide-react";
+import { startOfWeek, startOfMonth, endOfMonth, subWeeks, subMonths, addDays, format as dateFmt } from "date-fns";
+import { Plus, RefreshCw, Check, X, Trash2, Copy, Link2, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -33,6 +34,8 @@ interface User {
   email: string;
   role: string;
   active: boolean;
+  slackUserId: string | null;
+  weeklyContractHours: number;
 }
 
 interface AsanaProject {
@@ -56,7 +59,14 @@ export default function AdminPage() {
   const [newUserName, setNewUserName] = useState("");
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"types" | "activities" | "team" | "asana">("types");
+  const [activeTab, setActiveTab] = useState<"types" | "activities" | "team" | "asana" | "hub">("types");
+
+  // ─── Hub state ────────────────────────────────────────────────
+  interface HubSnapshot { id: string; type: string; source: string; label: string; periodFrom: string; periodTo: string; generatedAt: string; }
+  const [hubToken, setHubToken] = useState<string | null>(null);
+  const [hubSnapshots, setHubSnapshots] = useState<HubSnapshot[]>([]);
+  const [hubCopied, setHubCopied] = useState(false);
+  const [generating, setGenerating] = useState<string | null>(null);
 
   const fetchAll = useCallback(async () => {
     const [wt, act, usr, ap] = await Promise.all([
@@ -209,6 +219,24 @@ export default function AdminPage() {
     fetchAll();
   }
 
+  async function updateUserSlackId(id: string, slackUserId: string) {
+    await fetch("/api/admin/users", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, slackUserId: slackUserId.trim() }),
+    });
+    fetchAll();
+  }
+
+  async function updateUserContractHours(id: string, hours: number) {
+    await fetch("/api/admin/users", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, weeklyContractHours: hours }),
+    });
+    fetchAll();
+  }
+
   async function deleteUser(id: string, name: string | null, email: string) {
     const label = name || email;
     if (!confirm(`Delete ${label}? This cannot be undone.`)) return;
@@ -270,11 +298,87 @@ export default function AdminPage() {
     }
   }
 
+  // ─── Hub functions ────────────────────────────────────────────
+
+  const fetchHub = useCallback(async () => {
+    const [cfg, snaps] = await Promise.all([
+      fetch("/api/admin/hub").then((r) => r.json()),
+      fetch("/api/admin/hub/snapshots").then((r) => r.json()),
+    ]);
+    if (cfg.token) setHubToken(cfg.token);
+    if (Array.isArray(snaps)) setHubSnapshots(snaps);
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "hub") fetchHub();
+  }, [activeTab, fetchHub]);
+
+  async function deleteSnapshot(id: string, label: string) {
+    if (!confirm(`Delete report "${label}"?`)) return;
+    await fetch("/api/admin/hub", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "delete", snapshotId: id }),
+    });
+    fetchHub();
+  }
+
+  async function generateSnapshot(key: string, type: "WEEKLY" | "MONTHLY", from: Date, to: Date, label: string) {
+    setGenerating(key);
+    try {
+      await fetch("/api/admin/hub/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type,
+          from: dateFmt(from, "yyyy-MM-dd"),
+          to: dateFmt(to, "yyyy-MM-dd"),
+          label,
+        }),
+      });
+      fetchHub();
+    } finally {
+      setGenerating(null);
+    }
+  }
+
+  function handleGenerate(key: string) {
+    const today = new Date();
+    if (key === "this-week") {
+      const from = startOfWeek(today, { weekStartsOn: 1 });
+      const label = `Week ${dateFmt(from, "MMM d")}–${dateFmt(today, "MMM d, yyyy")}`;
+      generateSnapshot(key, "WEEKLY", from, today, label);
+    } else if (key === "last-week") {
+      const from = startOfWeek(subWeeks(today, 1), { weekStartsOn: 1 });
+      const to = addDays(from, 4);
+      const label = `Week ${dateFmt(from, "MMM d")}–${dateFmt(to, "MMM d, yyyy")}`;
+      generateSnapshot(key, "WEEKLY", from, to, label);
+    } else if (key === "this-month") {
+      const from = startOfMonth(today);
+      const label = `${dateFmt(today, "MMMM yyyy")} (partial)`;
+      generateSnapshot(key, "MONTHLY", from, today, label);
+    } else if (key === "last-month") {
+      const lastMonth = subMonths(today, 1);
+      const from = startOfMonth(lastMonth);
+      const to = endOfMonth(lastMonth);
+      const label = dateFmt(from, "MMMM yyyy");
+      generateSnapshot(key, "MONTHLY", from, to, label);
+    }
+  }
+
+  function copyHubLink() {
+    if (!hubToken) return;
+    navigator.clipboard.writeText(`${window.location.origin}/hub/${hubToken}`);
+    setHubCopied(true);
+    setTimeout(() => setHubCopied(false), 2000);
+  }
+
   const tabs = [
     { id: "types" as const, label: "Work Types" },
     { id: "activities" as const, label: "Activities" },
     { id: "team" as const, label: "Team" },
     { id: "asana" as const, label: "Asana" },
+    { id: "hub" as const, label: "Report Hub" },
   ];
 
   const inactiveAsanaCount = asanaProjects.filter((p) => !p.active).length;
@@ -486,42 +590,72 @@ export default function AdminPage() {
             {users.map((u) => (
               <div
                 key={u.id}
-                className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-3"
+                className="rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-3"
               >
-                <div className="min-w-0">
-                  <p className={cn("text-sm font-medium", !u.active && "text-zinc-500")}>
-                    {u.name || u.email}
-                  </p>
-                  <p className="text-xs text-zinc-500 truncate">{u.email}</p>
+                <div className="flex items-center justify-between">
+                  <div className="min-w-0">
+                    <p className={cn("text-sm font-medium", !u.active && "text-zinc-500")}>
+                      {u.name || u.email}
+                    </p>
+                    <p className="text-xs text-zinc-500 truncate">{u.email}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={u.role}
+                      onValueChange={(role) => role && updateUserRole(u.id, role)}
+                    >
+                      <SelectTrigger className="w-28 h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="MEMBER">Member</SelectItem>
+                        <SelectItem value="MANAGER">Manager</SelectItem>
+                        <SelectItem value="ADMIN">Admin</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Badge
+                      variant={u.active ? "default" : "secondary"}
+                      className="cursor-pointer"
+                      onClick={() => toggleUser(u.id, u.active)}
+                    >
+                      {u.active ? "Active" : "Inactive"}
+                    </Badge>
+                    <button
+                      onClick={() => deleteUser(u.id, u.name, u.email)}
+                      className="rounded-md p-1.5 text-zinc-600 transition hover:bg-red-500/10 hover:text-red-400"
+                      title="Delete user"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Select
-                    value={u.role}
-                    onValueChange={(role) => role && updateUserRole(u.id, role)}
-                  >
-                    <SelectTrigger className="w-28 h-8 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="MEMBER">Member</SelectItem>
-                      <SelectItem value="MANAGER">Manager</SelectItem>
-                      <SelectItem value="ADMIN">Admin</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Badge
-                    variant={u.active ? "default" : "secondary"}
-                    className="cursor-pointer"
-                    onClick={() => toggleUser(u.id, u.active)}
-                  >
-                    {u.active ? "Active" : "Inactive"}
-                  </Badge>
-                  <button
-                    onClick={() => deleteUser(u.id, u.name, u.email)}
-                    className="rounded-md p-1.5 text-zinc-600 transition hover:bg-red-500/10 hover:text-red-400"
-                    title="Delete user"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                <div className="mt-2 flex items-center gap-2">
+                  <Input
+                    defaultValue={u.slackUserId ?? ""}
+                    placeholder="Slack ID (e.g. U0XXXXXXX)"
+                    className="h-7 text-xs bg-zinc-900 border-zinc-800 flex-1"
+                    onBlur={(e) => {
+                      const v = e.target.value.trim();
+                      if (v !== (u.slackUserId ?? "")) updateUserSlackId(u.id, v);
+                    }}
+                  />
+                  <div className="flex items-center gap-1">
+                    <Input
+                      type="number"
+                      min={0}
+                      max={80}
+                      step={1}
+                      defaultValue={u.weeklyContractHours}
+                      className="h-7 text-xs bg-zinc-900 border-zinc-800 w-16"
+                      onBlur={(e) => {
+                        const v = parseInt(e.target.value, 10);
+                        if (!Number.isNaN(v) && v !== u.weeklyContractHours) {
+                          updateUserContractHours(u.id, v);
+                        }
+                      }}
+                    />
+                    <span className="text-xs text-zinc-500">h/wk</span>
+                  </div>
                 </div>
               </div>
             ))}
@@ -609,6 +743,118 @@ export default function AdminPage() {
                 ))}
               </div>
             </>
+          )}
+        </div>
+      )}
+
+      {/* Report Hub */}
+      {activeTab === "hub" && (
+        <div className="space-y-6">
+          <p className="text-sm text-zinc-400">
+            Manage the public report hub link and view auto-generated snapshots.
+          </p>
+
+          {/* Shareable link */}
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4 space-y-3">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+              <Link2 className="h-3.5 w-3.5" />
+              Shareable Link
+            </div>
+            {hubToken ? (
+              <>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 truncate rounded-md bg-zinc-800 px-3 py-2 text-[12px] text-zinc-300 font-mono">
+                    {typeof window !== "undefined" ? `${window.location.origin}/hub/${hubToken}` : `/hub/${hubToken}`}
+                  </code>
+                  <button
+                    onClick={copyHubLink}
+                    className="flex items-center gap-1.5 rounded-md border border-zinc-700 px-3 py-2 text-[12px] text-zinc-400 transition hover:border-lime-400/30 hover:text-lime-400"
+                  >
+                    {hubCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                    {hubCopied ? "Copied!" : "Copy"}
+                  </button>
+                </div>
+                <p className="text-[11px] text-zinc-600">
+                  This link is permanent — Michael can bookmark it and it will always work.
+                </p>
+              </>
+            ) : (
+              <p className="text-[12px] text-zinc-600">Loading…</p>
+            )}
+          </div>
+
+          {/* Manual generation */}
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4 space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Generate Report Now</p>
+            <p className="text-[12px] text-zinc-500">
+              Weekly runs automatically every Friday at 10pm EST. Monthly runs on the last day of each month. Use these to generate on demand.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {([
+                { key: "this-week", label: "This week", color: "hover:border-violet-400/30 hover:text-violet-400" },
+                { key: "last-week", label: "Last week", color: "hover:border-violet-400/30 hover:text-violet-400" },
+                { key: "this-month", label: "This month", color: "hover:border-lime-400/30 hover:text-lime-400" },
+                { key: "last-month", label: "Last month", color: "hover:border-lime-400/30 hover:text-lime-400" },
+              ] as const).map(({ key, label, color }) => (
+                <Button
+                  key={key}
+                  onClick={() => handleGenerate(key)}
+                  disabled={generating !== null}
+                  size="sm"
+                  variant="outline"
+                  className={cn("border-zinc-700 text-zinc-400", color)}
+                >
+                  <Play className={cn("mr-2 h-3.5 w-3.5", generating === key && "animate-pulse")} />
+                  {generating === key ? "Generating…" : label}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          {/* Snapshots list */}
+          {hubSnapshots.length === 0 ? (
+            <p className="py-6 text-center text-[13px] text-zinc-600">No reports yet. Generate one above or wait for the automatic cron.</p>
+          ) : (
+            <div className="space-y-6">
+              {(["AUTO", "MANUAL"] as const).map((src) => {
+                const group = hubSnapshots.filter((s) => s.source === src);
+                if (group.length === 0) return null;
+                return (
+                  <div key={src} className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+                      {src === "AUTO" ? "Automated Reports" : "Custom Reports"} ({group.length})
+                    </p>
+                    {group.map((s) => (
+                      <div
+                        key={s.id}
+                        className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-3"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className={cn(
+                            "rounded-md px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase",
+                            s.type === "WEEKLY" ? "bg-violet-400/10 text-violet-400" : "bg-lime-400/10 text-lime-400"
+                          )}>
+                            {s.type === "WEEKLY" ? "Weekly" : "Monthly"}
+                          </span>
+                          <span className="text-[13px] text-zinc-300">{s.label}</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-[11px] text-zinc-600">
+                            {new Date(s.generatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                          </span>
+                          <button
+                            onClick={() => deleteSnapshot(s.id, s.label)}
+                            className="rounded-md p-1.5 text-zinc-600 transition hover:bg-red-500/10 hover:text-red-400"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
       )}

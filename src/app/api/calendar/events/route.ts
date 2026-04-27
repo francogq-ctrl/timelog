@@ -107,10 +107,17 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "No Google account linked" }, { status: 400 });
   }
 
+  if (!account.refresh_token) {
+    return NextResponse.json(
+      { error: "reauth", message: "Calendar access needs to be refreshed. You'll be back in seconds." },
+      { status: 401 }
+    );
+  }
+
   const accessToken = await getValidAccessToken(session.user.id, account);
   if (!accessToken) {
     return NextResponse.json(
-      { error: "token_expired", message: "Your calendar token expired. Please sign out and back in." },
+      { error: "reauth", message: "Calendar access needs to be refreshed. You'll be back in seconds." },
       { status: 401 }
     );
   }

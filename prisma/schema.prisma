@@ -10,15 +10,17 @@ datasource db {
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String    @unique
-  emailVerified DateTime?
-  image         String?
-  role          Role      @default(MEMBER)
-  active        Boolean   @default(true)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id                  String    @id @default(cuid())
+  name                String?
+  email               String    @unique
+  emailVerified       DateTime?
+  image               String?
+  role                Role      @default(MEMBER)
+  active              Boolean   @default(true)
+  slackUserId         String?
+  weeklyContractHours Int       @default(40)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   accounts    Account[]
   sessions    Session[]
@@ -142,6 +144,41 @@ model Activity {
 
   @@unique([category, name])
   @@map("activities")
+}
+
+// ─── Report Hub ─────────────────────────────────────────────────────────────
+
+enum ReportType {
+  WEEKLY
+  MONTHLY
+}
+
+enum ReportSource {
+  AUTO
+  MANUAL
+}
+
+model ReportSnapshot {
+  id          String       @id @default(cuid())
+  type        ReportType
+  source      ReportSource @default(MANUAL)
+  periodFrom  DateTime
+  periodTo    DateTime
+  generatedAt DateTime     @default(now())
+  label       String
+  data        Json
+
+  @@index([type, generatedAt(sort: Desc)])
+  @@map("report_snapshots")
+}
+
+model HubConfig {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("hub_config")
 }
 
 // ─── Asana Cache ────────────────────────────────────────────────────────────

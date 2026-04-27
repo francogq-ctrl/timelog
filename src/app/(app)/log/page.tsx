@@ -349,15 +349,8 @@ export default function LogPage() {
             <Plus className="h-4 w-4 transition-gpu group-hover:rotate-90" />
             Log Time
           </button>
-          {/* Only show calendar import for own entries (not when admin is logging for others) */}
-          {!(isAdmin && targetUserId) && (
-            <CalendarImport
-              date={currentDate}
-              onImported={() => {
-                fetchEntries();
-                fetchWeekHours();
-              }}
-            />
+          {["franco@andgather.co", "juan@andgather.co"].includes(session?.user?.email ?? "") && (
+            <CalendarImport date={currentDate} onImported={fetchEntries} />
           )}
         </div>
       )}
