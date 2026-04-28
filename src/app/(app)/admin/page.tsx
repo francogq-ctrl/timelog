@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { AdminPtoForm } from "@/components/admin-pto-form";
 
 interface WorkType {
   id: string;
@@ -59,7 +60,7 @@ export default function AdminPage() {
   const [newUserName, setNewUserName] = useState("");
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"types" | "activities" | "team" | "asana" | "hub">("types");
+  const [activeTab, setActiveTab] = useState<"types" | "activities" | "team" | "pto" | "asana" | "hub">("types");
 
   // ─── Hub state ────────────────────────────────────────────────
   interface HubSnapshot { id: string; type: string; source: string; label: string; periodFrom: string; periodTo: string; generatedAt: string; }
@@ -377,6 +378,7 @@ export default function AdminPage() {
     { id: "types" as const, label: "Work Types" },
     { id: "activities" as const, label: "Activities" },
     { id: "team" as const, label: "Team" },
+    { id: "pto" as const, label: "PTO" },
     { id: "asana" as const, label: "Asana" },
     { id: "hub" as const, label: "Report Hub" },
   ];
@@ -661,6 +663,11 @@ export default function AdminPage() {
             ))}
           </div>
         </div>
+      )}
+
+      {/* PTO */}
+      {activeTab === "pto" && (
+        <AdminPtoForm users={users} />
       )}
 
       {/* Asana */}
