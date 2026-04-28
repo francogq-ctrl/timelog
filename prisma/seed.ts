@@ -23,10 +23,11 @@ async function main() {
     });
   }
 
-  const activities: { cat: "INTERNAL" | "ADMIN" | "TRAINING"; items: string[] }[] = [
+  const activities: { cat: "INTERNAL" | "ADMIN" | "TRAINING" | "TIME_OFF"; items: string[] }[] = [
     { cat: "INTERNAL", items: ["Team Meeting", "Creative Exploration", "R&D", "Portfolio", "Pitch/Proposal", "Company Social Media"] },
     { cat: "ADMIN", items: ["Invoicing", "HR/People", "Scheduling", "Tool Setup", "Email/Comms"] },
     { cat: "TRAINING", items: ["Course/Workshop", "Skill Development", "Tool Learning", "Mentoring"] },
+    { cat: "TIME_OFF", items: ["Vacation", "Sick", "Holiday", "Personal"] },
   ];
 
   for (const { cat, items } of activities) {

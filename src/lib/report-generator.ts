@@ -14,7 +14,10 @@ const CLIENT_CANONICAL: Record<string, string> = {
 };
 
 export function normalizeClientName(name: string): string {
-  const stripped = name.replace(/\s*\[\d{4}\]\s*$/, "").trim();
+  let stripped = name.replace(/\s*\[\d{4}\]\s*$/, "").trim();
+  // Unwrap a single pair of enclosing brackets, e.g. "[Barker Wellness]" → "Barker Wellness"
+  const bracketed = stripped.match(/^\[(.+)\]$/);
+  if (bracketed) stripped = bracketed[1].trim();
   return CLIENT_CANONICAL[stripped.toLowerCase()] ?? stripped;
 }
 
@@ -54,6 +57,24 @@ export interface ReportData {
     entries: number;
     topType: string | null;
   }[];
+  byProject: {
+    projectGid: string;
+    projectName: string;
+    clientName: string;
+    totalHours: number;
+    loggedTaskCount: number;
+    totalTaskCount: number;
+    unlinkedHours: number;
+    tasks: {
+      taskGid: string;
+      taskName: string;
+      hours: number;
+      entriesCount: number;
+      peopleCount: number;
+      byWorkType: Record<string, number>;
+      completed: boolean;
+    }[];
+  }[];
   categoryTotals: Record<string, number>;
   workTypeTotals: { name: string; hours: number }[];
   missingUsers: { name: string | null; email: string }[];
@@ -71,7 +92,7 @@ export async function generateReportData(
     ...(userId && { userId }),
   };
 
-  const [entries, users] = await Promise.all([
+  const [entries, users, asanaProjects] = await Promise.all([
     prisma.timeEntry.findMany({
       where: dateFilter,
       include: {
@@ -84,6 +105,15 @@ export async function generateReportData(
     prisma.user.findMany({
       where: { active: true, ...(userId && { id: userId }) },
       select: { id: true, name: true, email: true },
+    }),
+    prisma.asanaProject.findMany({
+      where: { active: true },
+      include: {
+        tasks: {
+          where: { completed: false },
+          select: { gid: true, name: true, completed: true },
+        },
+      },
     }),
   ]);
 
@@ -241,6 +271,151 @@ export async function generateReportData(
     }))
     .sort((a, b) => b.hours - a.hours);
 
+  // ── BY PROJECT (left-join AsanaProject ⟕ TimeEntry) ───────────────────────
+  // Groups CLIENT_WORK entries by asanaProjectId AND surfaces tasks from the
+  // Asana cache that have zero logged hours, so we can see what's "tracked"
+  // vs "not tracked yet".
+
+  type ProjectAggTask = {
+    hours: number;
+    people: Set<string>;
+    entries: number;
+    byWorkType: Record<string, number>;
+  };
+  type ProjectAgg = {
+    hours: number;
+    people: Set<string>;
+    tasksLogged: Map<string, ProjectAggTask>; // taskGid → agg
+    tasksByName: Map<string, ProjectAggTask>; // fallback when asanaTaskId is null
+  };
+
+  const projectAggByGid: Map<string, ProjectAgg> = new Map();
+  // Track CLIENT_WORK hours per normalized client name with NO asanaProjectId,
+  // so we can attribute "unlinked" hours to the right project later.
+  const unlinkedHoursByClient: Map<string, number> = new Map();
+  // Track which clients appear in filteredEntries at all (to decide which
+  // projects are "relevant" for the period).
+  const clientsInPeriod: Set<string> = new Set();
+
+  for (const e of filteredEntries) {
+    if (e.category !== "CLIENT_WORK") continue;
+    if (e.clientName) {
+      clientsInPeriod.add(normalizeClientName(e.clientName));
+    }
+    if (!e.asanaProjectId) {
+      if (e.clientName) {
+        const key = normalizeClientName(e.clientName);
+        unlinkedHoursByClient.set(
+          key,
+          r2((unlinkedHoursByClient.get(key) ?? 0) + e.hours)
+        );
+      }
+      continue;
+    }
+    let agg = projectAggByGid.get(e.asanaProjectId);
+    if (!agg) {
+      agg = {
+        hours: 0,
+        people: new Set(),
+        tasksLogged: new Map(),
+        tasksByName: new Map(),
+      };
+      projectAggByGid.set(e.asanaProjectId, agg);
+    }
+    agg.hours = r2(agg.hours + e.hours);
+    agg.people.add(e.userId);
+
+    const taskMap = e.asanaTaskId ? agg.tasksLogged : agg.tasksByName;
+    const taskKey = e.asanaTaskId ?? e.asanaTaskName ?? "(no task)";
+    let taskAgg = taskMap.get(taskKey);
+    if (!taskAgg) {
+      taskAgg = { hours: 0, people: new Set(), entries: 0, byWorkType: {} };
+      taskMap.set(taskKey, taskAgg);
+    }
+    taskAgg.hours = r2(taskAgg.hours + e.hours);
+    taskAgg.people.add(e.userId);
+    taskAgg.entries += 1;
+    const wtName = e.workType?.name ?? "Other";
+    taskAgg.byWorkType[wtName] = r2((taskAgg.byWorkType[wtName] ?? 0) + e.hours);
+  }
+
+  const byProject = asanaProjects
+    .map((proj) => {
+      const projClient = normalizeClientName(proj.name);
+      const agg = projectAggByGid.get(proj.gid);
+      const unlinkedHours = unlinkedHoursByClient.get(projClient) ?? 0;
+
+      // Build task list: cached Asana tasks (incomplete only) + any logged
+      // tasks not in the cache (completed/archived/orphaned).
+      const cachedGids = new Set(proj.tasks.map((t) => t.gid));
+
+      const fromCache = proj.tasks.map((t) => {
+        const logged = agg?.tasksLogged.get(t.gid);
+        return {
+          taskGid: t.gid,
+          taskName: t.name,
+          hours: logged?.hours ?? 0,
+          entriesCount: logged?.entries ?? 0,
+          peopleCount: logged?.people.size ?? 0,
+          byWorkType: logged?.byWorkType ?? {},
+          completed: t.completed,
+        };
+      });
+
+      const orphanLogged = agg
+        ? Array.from(agg.tasksLogged.entries())
+            .filter(([gid]) => !cachedGids.has(gid))
+            .map(([gid, t]) => ({
+              taskGid: gid,
+              taskName: "(unknown task)",
+              hours: t.hours,
+              entriesCount: t.entries,
+              peopleCount: t.people.size,
+              byWorkType: t.byWorkType,
+              completed: false,
+            }))
+        : [];
+
+      const namedFallback = agg
+        ? Array.from(agg.tasksByName.entries()).map(([name, t]) => ({
+            taskGid: `${proj.gid}::${name}`,
+            taskName: name === "(no task)" ? "(no task)" : name,
+            hours: t.hours,
+            entriesCount: t.entries,
+            peopleCount: t.people.size,
+            byWorkType: t.byWorkType,
+            completed: false,
+          }))
+        : [];
+
+      const tasks = [...fromCache, ...orphanLogged, ...namedFallback].sort(
+        (a, b) => b.hours - a.hours
+      );
+
+      const loggedTaskCount = tasks.filter((t) => t.hours > 0).length;
+      const totalTaskCount = proj.tasks.length;
+      const totalHours = agg?.hours ?? 0;
+
+      return {
+        projectGid: proj.gid,
+        projectName: proj.name,
+        clientName: projClient,
+        totalHours,
+        loggedTaskCount,
+        totalTaskCount,
+        unlinkedHours,
+        tasks,
+      };
+    })
+    // Only include projects that are relevant for the selected period:
+    // either they have logged hours OR their client appears in filteredEntries.
+    // Also respect the clientName filter.
+    .filter((p) => {
+      if (clientName && p.clientName !== clientName) return false;
+      return p.totalHours > 0 || clientsInPeriod.has(p.clientName);
+    })
+    .sort((a, b) => b.totalHours - a.totalHours);
+
   const categoryTotals: Record<string, number> = {};
   for (const e of filteredEntries) {
     categoryTotals[e.category] = r2(
@@ -276,6 +451,7 @@ export async function generateReportData(
     compliance,
     byClient,
     byDeliverable,
+    byProject,
     categoryTotals,
     workTypeTotals: Object.entries(workTypeTotalsMap)
       .map(([name, hours]) => ({ name, hours }))
