@@ -55,6 +55,24 @@ interface ReportData {
     entries: number;
     topType: string | null;
   }[];
+  byProject: {
+    projectGid: string;
+    projectName: string;
+    clientName: string;
+    totalHours: number;
+    loggedTaskCount: number;
+    totalTaskCount: number;
+    unlinkedHours: number;
+    tasks: {
+      taskGid: string;
+      taskName: string;
+      hours: number;
+      entriesCount: number;
+      peopleCount: number;
+      byWorkType: Record<string, number>;
+      completed: boolean;
+    }[];
+  }[];
   categoryTotals: Record<string, number>;
   workTypeTotals: { name: string; hours: number }[];
   missingUsers: { name: string | null; email: string }[];
@@ -910,7 +928,7 @@ ${data.workTypeTotals.length > 0 ? `<div class="section">
           </Section>
 
           {/* ── CATEGORY BREAKDOWN ── */}
-          <Section num="04" title="Category" em="Breakdown">
+          <Section num="05" title="Category" em="Breakdown">
             {totalHours > 0 && (
               <>
                 {/* Stacked bar */}
@@ -1138,9 +1156,22 @@ ${data.workTypeTotals.length > 0 ? `<div class="section">
             )}
           </Section>
 
+          {/* ── HOURS BY PROJECT & DELIVERABLE (left-join Asana) ── */}
+          <Section num="04" title="Hours by" em="Project & Deliverable">
+            {data.byProject.length > 0 ? (
+              <ByProjectView
+                projects={data.byProject}
+                totalHours={totalHours}
+                clientColors={CLIENT_COLORS_HEX}
+              />
+            ) : (
+              <EmptyState />
+            )}
+          </Section>
+
           {/* ── WORK TYPE BREAKDOWN ── */}
           {data.workTypeTotals.length > 0 && (
-            <Section num="06" title="Work Type" em="Breakdown">
+            <Section num="07" title="Work Type" em="Breakdown">
               <div className="space-y-2">
                 {(() => {
                   const maxHours = data.workTypeTotals[0]?.hours ?? 1;
@@ -1171,7 +1202,7 @@ ${data.workTypeTotals.length > 0 ? `<div class="section">
           )}
 
           {/* ── DELIVERABLES ── */}
-          <Section num="05" title="Project &" em="Deliverable">
+          <Section num="06" title="Project &" em="Deliverable">
             {/* Project search */}
             <div className="mb-4">
               <input
@@ -1234,7 +1265,7 @@ ${data.workTypeTotals.length > 0 ? `<div class="section">
             const hasDataQualityIssues = entriesWithoutTask > 0 || lowActivityPeople.length > 0 || data.missingUsers.length > 0;
 
             return (
-              <Section num="07" title="Data" em="Quality">
+              <Section num="08" title="Data" em="Quality">
                 {hasDataQualityIssues ? (
                   <div className="space-y-3">
                     {entriesWithoutTask > 0 && (
@@ -1416,4 +1447,252 @@ function StatCard({ icon, label, value, suffix, accent, warn }: {
 
 function EmptyState() {
   return <p className="py-8 text-center text-[13px] text-zinc-600">No data for this period</p>;
+}
+
+type ByProjectItem = {
+  projectGid: string;
+  projectName: string;
+  clientName: string;
+  totalHours: number;
+  loggedTaskCount: number;
+  totalTaskCount: number;
+  unlinkedHours: number;
+  tasks: {
+    taskGid: string;
+    taskName: string;
+    hours: number;
+    entriesCount: number;
+    peopleCount: number;
+    byWorkType: Record<string, number>;
+    completed: boolean;
+  }[];
+};
+
+const TASK_ROW_LIMIT = 30;
+
+function stripYearSuffix(name: string): string {
+  return name.replace(/\s*\[\d{4}\]\s*$/, "").trim();
+}
+
+function ByProjectView({
+  projects,
+  totalHours,
+  clientColors,
+}: {
+  projects: ByProjectItem[];
+  totalHours: number;
+  clientColors: string[];
+}) {
+  const totalUnlinked = projects.reduce(
+    (sum, p) => sum + p.unlinkedHours,
+    0
+  );
+  const maxProjectHours = Math.max(
+    ...projects.map((p) => p.totalHours),
+    1
+  );
+
+  return (
+    <div className="space-y-6">
+      {/* Data quality callout */}
+      {totalUnlinked > 0 && (
+        <div className="flex items-start gap-3 rounded-xl border border-amber-500/20 bg-amber-500/[0.04] px-4 py-3">
+          <AlertTriangle className="mt-0.5 h-4 w-4 text-amber-400 shrink-0" />
+          <div>
+            <p className="text-[13px] font-medium text-amber-400">
+              {Math.round(totalUnlinked * 100) / 100}h of client work not linked to any Asana project
+            </p>
+            <p className="mt-1 text-[12px] text-zinc-500">
+              Ask the team to backfill the project &amp; task on these entries so they show up against the right deliverable.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Part A: project summary bars */}
+      <div className="space-y-2">
+        {projects.map((p, index) => {
+          const pct = (p.totalHours / maxProjectHours) * 100;
+          const colorHex = clientColors[index % clientColors.length];
+          const shareOfTotal =
+            totalHours > 0 ? ((p.totalHours / totalHours) * 100).toFixed(1) : "0";
+          return (
+            <div key={p.projectGid} className="flex items-center gap-3">
+              <div className="w-44 shrink-0 min-w-0">
+                <p
+                  className="truncate text-[13px] font-medium text-white"
+                  title={p.clientName}
+                >
+                  {p.clientName}
+                </p>
+                <p
+                  className="truncate text-[11px] text-zinc-600"
+                  title={p.projectName}
+                >
+                  {stripYearSuffix(p.projectName)}
+                </p>
+              </div>
+              <div className="flex-1 h-7 rounded-md bg-white/[0.03] overflow-hidden">
+                <div
+                  className="h-full rounded-md flex items-center transition-all"
+                  style={{
+                    width: `${Math.max(pct, p.totalHours > 0 ? 4 : 0)}%`,
+                    backgroundColor: colorHex + "b3",
+                  }}
+                >
+                  {p.totalHours > 0 && (
+                    <span className="pl-2 text-[12px] font-semibold text-[#0a0a0b] whitespace-nowrap">
+                      {p.totalHours}h
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="w-32 shrink-0 flex flex-col items-end gap-0.5">
+                <span className="text-[12px] font-mono text-zinc-400 whitespace-nowrap">
+                  {p.loggedTaskCount}/{p.totalTaskCount} tasks
+                </span>
+                <span className="text-[11px] text-zinc-600 font-mono">
+                  {shareOfTotal}%
+                </span>
+              </div>
+              {p.unlinkedHours > 0 && (
+                <span
+                  className="rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[11px] font-medium text-amber-400 whitespace-nowrap"
+                  title="Hours logged against this client without an Asana project link"
+                >
+                  ⚠ {p.unlinkedHours}h unlinked
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Part B: per-project task tables */}
+      <div className="space-y-5">
+        {projects.map((p) => {
+          const visibleTasks = p.tasks.slice(0, TASK_ROW_LIMIT);
+          const overflow = p.tasks.length - visibleTasks.length;
+          return (
+            <div
+              key={p.projectGid}
+              className="rounded-xl border border-white/[0.06] bg-white/[0.02] overflow-hidden"
+            >
+              {/* Sticky-ish project header row */}
+              <div className="flex items-center justify-between border-b border-white/[0.06] bg-lime-400/[0.06] px-4 py-2">
+                <div className="min-w-0">
+                  <p className="text-[13px] font-medium text-white truncate" title={p.projectName}>
+                    {p.clientName}
+                    <span className="ml-2 text-[12px] font-normal text-zinc-500">
+                      {stripYearSuffix(p.projectName)}
+                    </span>
+                  </p>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <span className="text-[12px] font-mono text-zinc-400">
+                    {p.totalHours}h
+                  </span>
+                  <span className="text-[11px] text-zinc-600 font-mono">
+                    {p.loggedTaskCount}/{p.totalTaskCount} tracked
+                  </span>
+                </div>
+              </div>
+
+              {p.tasks.length === 0 ? (
+                <p className="px-4 py-6 text-center text-[12px] text-zinc-600">
+                  No tasks cached for this project
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-[13px]">
+                    <thead>
+                      <tr className="border-b border-white/[0.04]">
+                        <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider text-zinc-500">Task</th>
+                        <th className="px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider text-zinc-500">Hours</th>
+                        <th className="px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider text-zinc-500">People</th>
+                        <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider text-zinc-500">Work Types</th>
+                        <th className="px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider text-zinc-500">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {visibleTasks.map((t) => {
+                        const isZero = t.hours === 0;
+                        const workTypes = Object.entries(t.byWorkType)
+                          .sort((a, b) => b[1] - a[1])
+                          .slice(0, 4);
+                        return (
+                          <tr
+                            key={t.taskGid}
+                            className="border-b border-white/[0.03] last:border-b-0"
+                          >
+                            <td
+                              className={cn(
+                                "px-4 py-2 max-w-[280px] truncate",
+                                isZero
+                                  ? "italic text-zinc-600"
+                                  : "text-zinc-300"
+                              )}
+                              title={t.taskName}
+                            >
+                              {t.taskName}
+                            </td>
+                            <td
+                              className={cn(
+                                "px-4 py-2 text-right font-mono",
+                                isZero ? "text-zinc-700" : "text-white"
+                              )}
+                            >
+                              {isZero ? "—" : t.hours}
+                            </td>
+                            <td
+                              className={cn(
+                                "px-4 py-2 text-right font-mono",
+                                isZero ? "text-zinc-700" : "text-zinc-400"
+                              )}
+                            >
+                              {isZero ? "—" : t.peopleCount}
+                            </td>
+                            <td className="px-4 py-2">
+                              {isZero ? (
+                                <span className="text-zinc-700">—</span>
+                              ) : (
+                                <div className="flex flex-wrap gap-1.5">
+                                  {workTypes.map(([type, hrs]) => (
+                                    <span
+                                      key={type}
+                                      className="rounded-full bg-white/[0.05] px-2 py-0.5 text-[11px] text-zinc-400"
+                                    >
+                                      {type}: {hrs}h
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-4 py-2 text-right">
+                              {t.completed ? (
+                                <span className="rounded-full bg-lime-400/10 border border-lime-400/20 px-2 py-0.5 text-[11px] font-medium text-lime-400">
+                                  complete
+                                </span>
+                              ) : isZero ? (
+                                <span className="text-[11px] text-zinc-700">not tracked</span>
+                              ) : null}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  {overflow > 0 && (
+                    <p className="px-4 py-2 text-[12px] text-zinc-600">
+                      + {overflow} more {overflow === 1 ? "task" : "tasks"}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
