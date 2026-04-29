@@ -45,6 +45,7 @@ interface ReportData {
     name: string;
     hours: number;
     byType: Record<string, number>;
+    byPerson: { name: string; hours: number }[];
     peopleCount: number;
   }[];
   byDeliverable: {
@@ -102,6 +103,9 @@ export default function ReportsPage() {
   // Dropdown open states
   const [userDropOpen, setUserDropOpen] = useState(false);
   const [clientDropOpen, setClientDropOpen] = useState(false);
+
+  // Expandable client row state
+  const [expandedClient, setExpandedClient] = useState<string | null>(null);
 
   // Date range state for year/month/custom modes
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
@@ -1080,77 +1084,124 @@ ${data.workTypeTotals.length > 0 ? `<div class="section">
           </Section>
           )}
 
-          {/* ── HOURS BY CLIENT ── */}
+          {/* ── HOURS BY CLIENT (expandable) ── */}
           <Section num="03" title="Hours by" em="Client">
             {data.byClient.length > 0 ? (
-              <>
-                {/* Bar chart */}
-                <div className="space-y-2">
-                  {(() => {
-                    const maxHours = data.byClient[0]?.hours ?? 1;
-                    return data.byClient.map((c, index) => {
-                      const pct = (c.hours / maxHours) * 100;
-                      const colorHex = CLIENT_COLORS_HEX[index % CLIENT_COLORS_HEX.length];
-                      return (
-                        <div key={c.name} className="flex items-center gap-3">
+              <div className="space-y-2">
+                {(() => {
+                  const maxHours = data.byClient[0]?.hours ?? 1;
+                  return data.byClient.map((c, index) => {
+                    const pct = Math.max((c.hours / maxHours) * 100, 4);
+                    const colorHex = CLIENT_COLORS_HEX[index % CLIENT_COLORS_HEX.length];
+                    const isExpanded = expandedClient === c.name;
+                    const maxTypeH = Math.max(...Object.values(c.byType), 1);
+                    const sharePct = totalHours > 0 ? ((c.hours / totalHours) * 100).toFixed(1) : "0";
+                    return (
+                      <div
+                        key={c.name}
+                        className={cn(
+                          "rounded-xl border overflow-hidden transition-all",
+                          isExpanded
+                            ? "border-white/[0.12] bg-white/[0.03]"
+                            : "border-white/[0.06] hover:border-white/[0.09]"
+                        )}
+                      >
+                        <button
+                          onClick={() => setExpandedClient(isExpanded ? null : c.name)}
+                          className="w-full flex items-center gap-3 px-3 py-2.5 text-left"
+                        >
                           <span className="w-32 shrink-0 truncate text-[13px] text-zinc-400" title={c.name}>{c.name}</span>
                           <div className="flex-1 h-7 rounded-md bg-white/[0.03] overflow-hidden">
                             <div
                               className="h-full rounded-md flex items-center transition-all"
-                              style={{ width: `${Math.max(pct, 4)}%`, backgroundColor: colorHex + "b3" }}
+                              style={{ width: `${pct}%`, backgroundColor: colorHex + "b3" }}
                             >
                               <span className="pl-2 text-[12px] font-semibold text-[#0a0a0b] whitespace-nowrap">
                                 {c.hours}h
                               </span>
                             </div>
                           </div>
-                          <span className="w-12 text-right text-[12px] text-zinc-500">
+                          <span className="w-12 shrink-0 text-right text-[12px] text-zinc-500">
                             {c.peopleCount} ppl
                           </span>
-                        </div>
-                      );
-                    });
-                  })()}
-                </div>
+                          <span className="w-12 shrink-0 text-right text-[11px] font-mono text-zinc-600">
+                            {sharePct}%
+                          </span>
+                          <span className="shrink-0 text-[11px] text-zinc-600 w-3">
+                            {isExpanded ? "▼" : "▶"}
+                          </span>
+                        </button>
 
-                {/* Client detail table */}
-                <div className="mt-6 overflow-x-auto">
-                  <table className="w-full text-[13px]">
-                    <thead>
-                      <tr className="border-b border-white/[0.06]">
-                        <th className="pb-2 text-left text-[11px] font-medium uppercase tracking-wider text-zinc-500">Client</th>
-                        <th className="pb-2 text-right text-[11px] font-medium uppercase tracking-wider text-zinc-500">Hours</th>
-                        <th className="pb-2 text-right text-[11px] font-medium uppercase tracking-wider text-zinc-500">% of Total</th>
-                        <th className="pb-2 text-right text-[11px] font-medium uppercase tracking-wider text-zinc-500">People</th>
-                        <th className="pb-2 text-left text-[11px] font-medium uppercase tracking-wider text-zinc-500 pl-4">Work Type Split</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.byClient.map((c) => (
-                        <tr key={c.name} className="border-b border-white/[0.03]">
-                          <td className="py-2.5 font-medium text-lime-400">{c.name}</td>
-                          <td className="py-2.5 text-right font-mono text-white">{c.hours}</td>
-                          <td className="py-2.5 text-right font-mono text-zinc-400">
-                            {totalHours > 0 ? `${((c.hours / totalHours) * 100).toFixed(1)}%` : "—"}
-                          </td>
-                          <td className="py-2.5 text-right font-mono text-zinc-400">{c.peopleCount}</td>
-                          <td className="py-2.5 pl-4">
-                            <div className="flex flex-wrap gap-1.5">
-                              {Object.entries(c.byType)
-                                .sort((a, b) => b[1] - a[1])
-                                .map(([type, hrs]) => (
-                                  <span key={type} className="rounded-full bg-white/[0.05] px-2 py-0.5 text-[11px] text-zinc-400">
-                                    {type}: {hrs}h
-                                  </span>
-                                ))}
+                        {isExpanded && (
+                          <div className="border-t border-white/[0.06] px-4 pb-4 pt-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                              <div>
+                                <p className="mb-3 text-[10px] font-medium uppercase tracking-widest text-zinc-600">
+                                  Work Type
+                                </p>
+                                <div className="space-y-2.5">
+                                  {Object.entries(c.byType)
+                                    .sort((a, b) => b[1] - a[1])
+                                    .map(([type, hrs]) => (
+                                      <div key={type} className="flex items-center gap-2">
+                                        <span className="w-32 shrink-0 truncate text-[12px] text-zinc-400" title={type}>
+                                          {type}
+                                        </span>
+                                        <div className="flex-1 h-1.5 rounded-full bg-white/[0.05] overflow-hidden">
+                                          <div
+                                            className="h-full rounded-full bg-violet-400/60"
+                                            style={{ width: `${Math.max((hrs / maxTypeH) * 100, 4)}%` }}
+                                          />
+                                        </div>
+                                        <span className="w-10 shrink-0 text-right text-[11px] font-mono text-zinc-400">
+                                          {hrs}h
+                                        </span>
+                                      </div>
+                                    ))}
+                                </div>
+                              </div>
+
+                              <div>
+                                <p className="mb-3 text-[10px] font-medium uppercase tracking-widest text-zinc-600">
+                                  People
+                                </p>
+                                <div className="space-y-2.5">
+                                  {(c.byPerson ?? []).map((p) => {
+                                    const initials = p.name
+                                      .split(" ")
+                                      .map((w) => w[0])
+                                      .slice(0, 2)
+                                      .join("")
+                                      .toUpperCase();
+                                    return (
+                                      <div key={p.name} className="flex items-center gap-2">
+                                        <div className="w-6 h-6 shrink-0 rounded-full bg-zinc-800 flex items-center justify-center text-[9px] font-bold text-zinc-400">
+                                          {initials}
+                                        </div>
+                                        <span className="flex-1 truncate text-[12px] text-zinc-400" title={p.name}>
+                                          {p.name}
+                                        </span>
+                                        <span className="shrink-0 text-[11px] font-mono text-zinc-400">
+                                          {p.hours}h
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                                  {(c.byPerson ?? []).length === 0 && (
+                                    <p className="text-[12px] text-zinc-600">
+                                      {c.peopleCount} {c.peopleCount === 1 ? "person" : "people"}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
             ) : (
               <EmptyState />
             )}
