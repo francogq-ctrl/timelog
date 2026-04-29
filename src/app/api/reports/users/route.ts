@@ -9,7 +9,7 @@ export async function GET() {
   }
 
   const users = await prisma.user.findMany({
-    where: { active: true },
+    where: { active: true, excludeFromReports: false },
     orderBy: { name: "asc" },
     select: { id: true, name: true, email: true },
   });

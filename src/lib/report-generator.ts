@@ -104,7 +104,7 @@ export async function generateReportData(
     }),
     prisma.user.findMany({
       where: { active: true, ...(userId && { id: userId }) },
-      select: { id: true, name: true, email: true },
+      select: { id: true, name: true, email: true, excludeFromReports: true },
     }),
     prisma.asanaProject.findMany({
       where: { active: true },
@@ -117,11 +117,20 @@ export async function generateReportData(
     }),
   ]);
 
+  // Hide users flagged with excludeFromReports (contractors keeping personal
+  // logs). When the caller explicitly filters by userId, we respect that —
+  // they asked for that specific person on purpose.
+  const excludedUserIds = new Set(
+    userId ? [] : users.filter((u) => u.excludeFromReports).map((u) => u.id)
+  );
+  const visibleUsers = users.filter((u) => !excludedUserIds.has(u.id));
+  const visibleEntries = entries.filter((e) => !excludedUserIds.has(e.userId));
+
   const filteredEntries = clientName
-    ? entries.filter(
+    ? visibleEntries.filter(
         (e) => e.clientName && normalizeClientName(e.clientName) === clientName
       )
-    : entries;
+    : visibleEntries;
 
   const totalHours = r2(filteredEntries.reduce((sum, e) => sum + e.hours, 0));
   const clientHours = r2(
@@ -147,7 +156,7 @@ export async function generateReportData(
     }
   > = {};
 
-  for (const u of users) {
+  for (const u of visibleUsers) {
     complianceMap[u.id] = {
       name: u.name ?? u.email,
       hours: 0,
@@ -432,7 +441,7 @@ export async function generateReportData(
     }
   }
 
-  const missingUsers = users.filter((u) => !usersWithEntries.has(u.id));
+  const missingUsers = visibleUsers.filter((u) => !usersWithEntries.has(u.id));
 
   return {
     overview: {
@@ -441,7 +450,7 @@ export async function generateReportData(
       clientPercent:
         totalHours > 0 ? Math.round((clientHours / totalHours) * 100) : 0,
       activeUsers: usersWithEntries.size,
-      totalUsers: users.length,
+      totalUsers: visibleUsers.length,
       totalClients: uniqueClients.size,
       avgDaily:
         usersWithEntries.size > 0

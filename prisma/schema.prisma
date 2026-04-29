@@ -17,6 +17,7 @@ model User {
   image               String?
   role                Role      @default(MEMBER)
   active              Boolean   @default(true)
+  excludeFromReports  Boolean   @default(false)
   slackUserId         String?
   weeklyContractHours Int       @default(40)
   createdAt           DateTime  @default(now())
