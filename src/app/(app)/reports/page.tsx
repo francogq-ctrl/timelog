@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useSession } from "next-auth/react";
 import { format, startOfWeek, endOfWeek, subWeeks, subMonths } from "date-fns";
 import {
   Download,
@@ -16,6 +17,8 @@ import {
   FileSpreadsheet,
   FileText,
   Upload,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { cn } from "@/lib/utils";
@@ -88,10 +91,14 @@ interface UserOption {
 type Period = "this-week" | "last-week" | "this-month" | "last-month" | "year" | "month" | "custom";
 
 export default function ReportsPage() {
+  const { data: session } = useSession();
+  const isAdmin = session?.user?.role === "ADMIN";
+
   const [data, setData] = useState<ReportData | null>(null);
   const [period, setPeriod] = useState<Period>("this-week");
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const [includeHidden, setIncludeHidden] = useState(false);
 
   // Filters
   const [users, setUsers] = useState<UserOption[]>([]);
@@ -125,13 +132,16 @@ export default function ReportsPage() {
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const importFileRef = useRef<HTMLInputElement>(null);
 
-  // Fetch users for filter
+  // Fetch users for filter (re-fetch when "include hidden" toggles)
   useEffect(() => {
-    fetch("/api/reports/users")
+    const url = includeHidden
+      ? "/api/reports/users?includeHidden=1"
+      : "/api/reports/users";
+    fetch(url)
       .then((r) => r.json())
       .then((json) => setUsers(Array.isArray(json) ? json : []))
       .catch(() => {});
-  }, []);
+  }, [includeHidden]);
 
   const getDateRange = useCallback(() => {
     const now = new Date();
@@ -187,6 +197,7 @@ export default function ReportsPage() {
     const params = new URLSearchParams({ from, to });
     if (selectedUser) params.set("userId", selectedUser.id);
     if (selectedClient) params.set("client", selectedClient);
+    if (includeHidden) params.set("includeHidden", "1");
     try {
       const res = await fetch(`/api/reports?${params}`);
       const json: ReportData = await res.json();
@@ -200,7 +211,7 @@ export default function ReportsPage() {
     } finally {
       setLoading(false);
     }
-  }, [getDateRange, selectedUser, selectedClient]);
+  }, [getDateRange, selectedUser, selectedClient, includeHidden]);
 
   useEffect(() => {
     setAllClients([]); // reset client list on period change so it refreshes
@@ -574,6 +585,29 @@ ${data.workTypeTotals.length > 0 ? `<div class="section">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Reports</h1>
         <div className="flex items-center gap-2">
+          {isAdmin && (
+            <button
+              onClick={() => setIncludeHidden((v) => !v)}
+              title={
+                includeHidden
+                  ? "Hidden users currently visible — click to hide"
+                  : "Show users flagged as hidden (e.g. contractors)"
+              }
+              className={cn(
+                "flex items-center gap-2 rounded-lg border px-3 py-2 text-[13px] font-medium transition",
+                includeHidden
+                  ? "border-amber-400/40 bg-amber-400/10 text-amber-400 hover:bg-amber-400/15"
+                  : "border-white/[0.08] text-zinc-400 hover:bg-white/[0.04] hover:text-white"
+              )}
+            >
+              {includeHidden ? (
+                <Eye className="h-3.5 w-3.5" />
+              ) : (
+                <EyeOff className="h-3.5 w-3.5" />
+              )}
+              {includeHidden ? "Showing hidden" : "Show hidden"}
+            </button>
+          )}
           <input
             ref={importFileRef}
             type="file"
