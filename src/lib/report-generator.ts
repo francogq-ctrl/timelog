@@ -83,9 +83,9 @@ export interface ReportData {
 export async function generateReportData(
   from: string,
   to: string,
-  options?: { userId?: string; clientName?: string }
+  options?: { userId?: string; clientName?: string; includeHidden?: boolean }
 ): Promise<ReportData> {
-  const { userId, clientName } = options ?? {};
+  const { userId, clientName, includeHidden } = options ?? {};
 
   const dateFilter = {
     date: { gte: new Date(from), lte: new Date(to) },
@@ -121,7 +121,9 @@ export async function generateReportData(
   // logs). When the caller explicitly filters by userId, we respect that —
   // they asked for that specific person on purpose.
   const excludedUserIds = new Set(
-    userId ? [] : users.filter((u) => u.excludeFromReports).map((u) => u.id)
+    userId || includeHidden
+      ? []
+      : users.filter((u) => u.excludeFromReports).map((u) => u.id)
   );
   const visibleUsers = users.filter((u) => !excludedUserIds.has(u.id));
   const visibleEntries = entries.filter((e) => !excludedUserIds.has(e.userId));
