@@ -248,6 +248,7 @@ export default function LogPage() {
         currentDate={currentDate}
         onDateChange={setCurrentDate}
         weekHours={weekHours}
+        allowFuture={isAdmin}
       />
 
       {/* Daily summary bar */}

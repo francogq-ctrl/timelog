@@ -9,11 +9,13 @@ interface DateNavigatorProps {
   onDateChange: (date: Date) => void;
   /** Number of hours logged per day of the week [Mon..Sun] */
   weekHours?: number[];
+  /** Allow navigation to future dates (admin only) */
+  allowFuture?: boolean;
 }
 
 const dayLabels = ["M", "T", "W", "T", "F", "S", "S"];
 
-export function DateNavigator({ currentDate, onDateChange, weekHours }: DateNavigatorProps) {
+export function DateNavigator({ currentDate, onDateChange, weekHours, allowFuture = false }: DateNavigatorProps) {
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
@@ -46,7 +48,7 @@ export function DateNavigator({ currentDate, onDateChange, weekHours }: DateNavi
           )}
           <button
             onClick={() => onDateChange(addDays(currentDate, 1))}
-            disabled={isToday(currentDate)}
+            disabled={!allowFuture && isToday(currentDate)}
             className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-500 transition-gpu hover:bg-white/[0.06] hover:text-white disabled:opacity-20 disabled:cursor-not-allowed"
           >
             <ChevronRight className="h-4 w-4" />
@@ -59,20 +61,23 @@ export function DateNavigator({ currentDate, onDateChange, weekHours }: DateNavi
         {weekDays.map((day, i) => {
           const isSelected = isSameDay(day, currentDate);
           const isFuture = day > new Date();
+          const blocked = isFuture && !allowFuture;
           const dayHours = weekHours?.[i] ?? 0;
           const hasEntries = dayHours > 0;
 
           return (
             <button
               key={i}
-              disabled={isFuture}
+              disabled={blocked}
               onClick={() => onDateChange(day)}
               className={cn(
                 "group relative flex flex-1 flex-col items-center gap-1 rounded-xl py-2 text-[11px] font-medium transition-gpu",
                 isSelected
                   ? "bg-white/[0.08] text-white"
-                  : isFuture
+                  : blocked
                   ? "text-zinc-700 cursor-not-allowed"
+                  : isFuture
+                  ? "text-zinc-600 hover:bg-white/[0.04] hover:text-zinc-400"
                   : "text-zinc-500 hover:bg-white/[0.04] hover:text-zinc-300"
               )}
             >
