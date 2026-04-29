@@ -328,9 +328,9 @@ export default function AdminPage() {
   async function generateSnapshot(key: string, type: "WEEKLY" | "MONTHLY", from: Date, to: Date, label: string) {
     setGenerating(key);
     try {
-      // When the admin opted to include hidden users, tag the snapshot label
-      // so it's obvious in the list which snapshots include them.
-      const finalLabel = hubIncludeHidden ? `${label} [incl. hidden]` : label;
+      // Subtle suffix when the snapshot includes hidden users — only the
+      // admin who toggled it knows what the trailing dash means.
+      const finalLabel = hubIncludeHidden ? `${label} -` : label;
       await fetch("/api/admin/hub/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
