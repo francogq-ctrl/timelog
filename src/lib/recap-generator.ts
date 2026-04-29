@@ -175,7 +175,10 @@ export async function generateTeamRecap(
 
   const [entries, activeUsers] = await Promise.all([
     prisma.timeEntry.findMany({
-      where: { date: { gte: weekStart, lte: weekEnd } },
+      where: {
+        date: { gte: weekStart, lte: weekEnd },
+        user: { excludeFromReports: false },
+      },
       select: {
         hours: true,
         category: true,
@@ -183,7 +186,7 @@ export async function generateTeamRecap(
       },
     }),
     prisma.user.findMany({
-      where: { active: true },
+      where: { active: true, excludeFromReports: false },
       select: { weeklyContractHours: true },
     }),
   ]);
