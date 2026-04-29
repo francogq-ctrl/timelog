@@ -9,18 +9,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { type, from, to, label } = await req.json() as {
+  const { type, from, to, label, includeHidden } = await req.json() as {
     type: "WEEKLY" | "MONTHLY";
     from: string;
     to: string;
     label: string;
+    includeHidden?: boolean;
   };
 
   if (!type || !from || !to || !label) {
     return NextResponse.json({ error: "type, from, to and label required" }, { status: 400 });
   }
 
-  const data = await generateReportData(from, to);
+  const data = await generateReportData(from, to, { includeHidden: !!includeHidden });
 
   const snapshot = await prisma.reportSnapshot.create({
     data: {

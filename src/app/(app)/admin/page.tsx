@@ -68,6 +68,7 @@ export default function AdminPage() {
   const [hubSnapshots, setHubSnapshots] = useState<HubSnapshot[]>([]);
   const [hubCopied, setHubCopied] = useState(false);
   const [generating, setGenerating] = useState<string | null>(null);
+  const [hubIncludeHidden, setHubIncludeHidden] = useState(false);
 
   const fetchAll = useCallback(async () => {
     const [wt, act, usr, ap] = await Promise.all([
@@ -327,6 +328,9 @@ export default function AdminPage() {
   async function generateSnapshot(key: string, type: "WEEKLY" | "MONTHLY", from: Date, to: Date, label: string) {
     setGenerating(key);
     try {
+      // When the admin opted to include hidden users, tag the snapshot label
+      // so it's obvious in the list which snapshots include them.
+      const finalLabel = hubIncludeHidden ? `${label} [incl. hidden]` : label;
       await fetch("/api/admin/hub/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -334,7 +338,8 @@ export default function AdminPage() {
           type,
           from: dateFmt(from, "yyyy-MM-dd"),
           to: dateFmt(to, "yyyy-MM-dd"),
-          label,
+          label: finalLabel,
+          includeHidden: hubIncludeHidden,
         }),
       });
       fetchHub();
@@ -796,6 +801,25 @@ export default function AdminPage() {
             <p className="text-[12px] text-zinc-500">
               Weekly runs automatically every Friday at 10pm EST. Monthly runs on the last day of each month. Use these to generate on demand.
             </p>
+
+            {/* Include hidden users toggle (admin contractor view) */}
+            <label className="flex items-center gap-2 cursor-pointer select-none w-fit rounded-md border border-zinc-800 bg-zinc-900/40 px-3 py-2 hover:border-amber-400/30 transition">
+              <input
+                type="checkbox"
+                checked={hubIncludeHidden}
+                onChange={(e) => setHubIncludeHidden(e.target.checked)}
+                className="h-3.5 w-3.5 accent-amber-400"
+              />
+              <span className={cn("text-[12px]", hubIncludeHidden ? "text-amber-400" : "text-zinc-400")}>
+                Include hidden users (e.g. contractors)
+              </span>
+              {hubIncludeHidden && (
+                <span className="text-[10px] uppercase tracking-wider text-amber-400/80 font-mono">
+                  ON
+                </span>
+              )}
+            </label>
+
             <div className="flex flex-wrap gap-2">
               {([
                 { key: "this-week", label: "This week", color: "hover:border-violet-400/30 hover:text-violet-400" },
@@ -816,6 +840,9 @@ export default function AdminPage() {
                 </Button>
               ))}
             </div>
+            <p className="text-[11px] text-zinc-600">
+              Snapshots are frozen — once generated, you can&apos;t toggle hidden users for the same snapshot. Generate a new one with the checkbox flipped.
+            </p>
           </div>
 
           {/* Snapshots list */}
