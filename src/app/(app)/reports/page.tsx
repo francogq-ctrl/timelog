@@ -114,6 +114,9 @@ export default function ReportsPage() {
   // Expandable client row state
   const [expandedClient, setExpandedClient] = useState<string | null>(null);
 
+  // Expandable Project & Deliverable groups
+  const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
+
   // Date range state for year/month/custom modes
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth()); // 0-11
@@ -1299,45 +1302,124 @@ ${data.workTypeTotals.length > 0 ? `<div class="section">
               />
             </div>
             {filteredDeliverables.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-[13px]">
-                  <thead>
-                    <tr className="border-b border-white/[0.06]">
-                      <th className="pb-2 text-left text-[11px] font-medium uppercase tracking-wider text-zinc-500">Project</th>
-                      <th className="pb-2 text-left text-[11px] font-medium uppercase tracking-wider text-zinc-500">Task</th>
-                      <th className="pb-2 text-right text-[11px] font-medium uppercase tracking-wider text-zinc-500">Hours</th>
-                      <th className="pb-2 text-right text-[11px] font-medium uppercase tracking-wider text-zinc-500">People</th>
-                      <th className="pb-2 text-right text-[11px] font-medium uppercase tracking-wider text-zinc-500">Entries</th>
-                      <th className="pb-2 text-left text-[11px] font-medium uppercase tracking-wider text-zinc-500 pl-4">Top Type</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredDeliverables.slice(0, 50).map((d, i) => (
-                      <tr key={i} className="border-b border-white/[0.03]">
-                        <td className="py-2.5 text-lime-400 max-w-[200px] truncate" title={d.client}>{d.client}</td>
-                        <td className="py-2.5 text-zinc-400 max-w-[200px] truncate" title={d.task ?? ""}>
-                          {d.task ?? <span className="text-zinc-600 italic">no task</span>}
-                        </td>
-                        <td className="py-2.5 text-right font-mono text-white">{d.hours}</td>
-                        <td className="py-2.5 text-right font-mono text-zinc-400">{d.peopleCount}</td>
-                        <td className="py-2.5 text-right font-mono text-zinc-400">{d.entries}</td>
-                        <td className="py-2.5 pl-4">
-                          {d.topType && (
-                            <span className="rounded-full bg-white/[0.05] px-2 py-0.5 text-[11px] text-zinc-400">
-                              {d.topType}
-                            </span>
+              (() => {
+                // Group by client (project)
+                const groups = new Map<string, typeof filteredDeliverables>();
+                for (const d of filteredDeliverables) {
+                  const key = d.client;
+                  if (!groups.has(key)) groups.set(key, []);
+                  groups.get(key)!.push(d);
+                }
+                const groupList = Array.from(groups.entries())
+                  .map(([client, rows]) => ({
+                    client,
+                    rows,
+                    totalHours: Math.round(rows.reduce((s, r) => s + r.hours, 0) * 100) / 100,
+                    totalEntries: rows.reduce((s, r) => s + r.entries, 0),
+                    peopleCount: Math.max(...rows.map((r) => r.peopleCount)),
+                  }))
+                  .sort((a, b) => b.totalHours - a.totalHours);
+
+                const allOpen = expandedProjects.size === groupList.length && groupList.length > 0;
+                const toggleAll = () =>
+                  setExpandedProjects(allOpen ? new Set() : new Set(groupList.map((g) => g.client)));
+                const toggleOne = (client: string) =>
+                  setExpandedProjects((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(client)) next.delete(client);
+                    else next.add(client);
+                    return next;
+                  });
+
+                return (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between pb-1">
+                      <p className="text-[11px] uppercase tracking-wider text-zinc-500">
+                        {groupList.length} {groupList.length === 1 ? "project" : "projects"}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={toggleAll}
+                        className="text-[11px] text-zinc-400 hover:text-white transition"
+                      >
+                        {allOpen ? "Collapse all" : "Expand all"}
+                      </button>
+                    </div>
+                    {groupList.map((g) => {
+                      const isOpen = expandedProjects.has(g.client);
+                      return (
+                        <div
+                          key={g.client}
+                          className="rounded-xl border border-white/[0.06] bg-white/[0.02] overflow-hidden"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => toggleOne(g.client)}
+                            aria-expanded={isOpen}
+                            className={cn(
+                              "flex w-full items-center justify-between bg-lime-400/[0.06] px-4 py-2 text-left transition hover:bg-lime-400/[0.1]",
+                              isOpen && "border-b border-white/[0.06]"
+                            )}
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <ChevronDown
+                                className={cn(
+                                  "h-3.5 w-3.5 text-zinc-500 transition shrink-0",
+                                  !isOpen && "-rotate-90"
+                                )}
+                              />
+                              <p className="text-[13px] font-medium text-lime-400 truncate" title={g.client}>
+                                {g.client}
+                              </p>
+                              <span className="text-[12px] font-normal text-zinc-500">
+                                · {g.rows.length} {g.rows.length === 1 ? "task" : "tasks"}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-4 shrink-0">
+                              <span className="font-mono text-[13px] text-white">{g.totalHours}h</span>
+                              <span className="text-[11px] text-zinc-500">{g.totalEntries} entries</span>
+                            </div>
+                          </button>
+                          {isOpen && (
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-[13px]">
+                                <thead>
+                                  <tr className="border-b border-white/[0.06]">
+                                    <th className="pb-2 pt-2 px-4 text-left text-[11px] font-medium uppercase tracking-wider text-zinc-500">Task</th>
+                                    <th className="pb-2 pt-2 text-right text-[11px] font-medium uppercase tracking-wider text-zinc-500">Hours</th>
+                                    <th className="pb-2 pt-2 text-right text-[11px] font-medium uppercase tracking-wider text-zinc-500">People</th>
+                                    <th className="pb-2 pt-2 text-right text-[11px] font-medium uppercase tracking-wider text-zinc-500">Entries</th>
+                                    <th className="pb-2 pt-2 px-4 text-left text-[11px] font-medium uppercase tracking-wider text-zinc-500">Top Type</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {g.rows.map((d, i) => (
+                                    <tr key={i} className="border-b border-white/[0.03] last:border-0">
+                                      <td className="py-2.5 px-4 text-zinc-400 max-w-[400px] truncate" title={d.task ?? ""}>
+                                        {d.task ?? <span className="text-zinc-600 italic">no task</span>}
+                                      </td>
+                                      <td className="py-2.5 text-right font-mono text-white">{d.hours}</td>
+                                      <td className="py-2.5 text-right font-mono text-zinc-400">{d.peopleCount}</td>
+                                      <td className="py-2.5 text-right font-mono text-zinc-400">{d.entries}</td>
+                                      <td className="py-2.5 px-4">
+                                        {d.topType && (
+                                          <span className="rounded-full bg-white/[0.05] px-2 py-0.5 text-[11px] text-zinc-400">
+                                            {d.topType}
+                                          </span>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
                           )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {filteredDeliverables.length > 50 && (
-                  <p className="mt-3 text-[12px] text-zinc-600">
-                    Showing 50 of {filteredDeliverables.length} deliverables
-                  </p>
-                )}
-              </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()
             ) : (
               <EmptyState />
             )}
