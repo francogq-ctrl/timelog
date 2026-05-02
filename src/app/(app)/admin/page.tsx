@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { startOfWeek, startOfMonth, endOfMonth, subWeeks, subMonths, addDays, format as dateFmt } from "date-fns";
+import { startOfWeek, startOfMonth, endOfMonth, subWeeks, subMonths, addDays, differenceInDays, parseISO, format as dateFmt } from "date-fns";
 import { Plus, RefreshCw, Check, X, Trash2, Copy, Link2, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -69,6 +69,8 @@ export default function AdminPage() {
   const [hubCopied, setHubCopied] = useState(false);
   const [generating, setGenerating] = useState<string | null>(null);
   const [hubIncludeHidden, setHubIncludeHidden] = useState(false);
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
 
   const fetchAll = useCallback(async () => {
     const [wt, act, usr, ap] = await Promise.all([
@@ -369,6 +371,18 @@ export default function AdminPage() {
       const to = endOfMonth(lastMonth);
       const label = dateFmt(from, "MMMM yyyy");
       generateSnapshot(key, "MONTHLY", from, to, label);
+    } else if (key === "custom") {
+      if (!customFrom || !customTo) return;
+      const from = parseISO(customFrom);
+      const to = parseISO(customTo);
+      if (from > to) return;
+      const span = differenceInDays(to, from);
+      const type: "WEEKLY" | "MONTHLY" = span <= 7 ? "WEEKLY" : "MONTHLY";
+      const sameYear = dateFmt(from, "yyyy") === dateFmt(to, "yyyy");
+      const label = sameYear
+        ? `${dateFmt(from, "MMM d")}–${dateFmt(to, "MMM d, yyyy")}`
+        : `${dateFmt(from, "MMM d, yyyy")}–${dateFmt(to, "MMM d, yyyy")}`;
+      generateSnapshot(key, type, from, to, label);
     }
   }
 
@@ -843,6 +857,41 @@ export default function AdminPage() {
             <p className="text-[11px] text-zinc-600">
               Snapshots are frozen — once generated, you can&apos;t toggle hidden users for the same snapshot. Generate a new one with the checkbox flipped.
             </p>
+
+            {/* Custom date range */}
+            <div className="mt-4 pt-4 border-t border-zinc-800/70 space-y-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Custom date range</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Input
+                  type="date"
+                  value={customFrom}
+                  onChange={(e) => setCustomFrom(e.target.value)}
+                  className="h-9 w-[160px] bg-zinc-900/60 text-[12px]"
+                  aria-label="From"
+                />
+                <span className="text-[12px] text-zinc-600">→</span>
+                <Input
+                  type="date"
+                  value={customTo}
+                  onChange={(e) => setCustomTo(e.target.value)}
+                  className="h-9 w-[160px] bg-zinc-900/60 text-[12px]"
+                  aria-label="To"
+                />
+                <Button
+                  onClick={() => handleGenerate("custom")}
+                  disabled={generating !== null || !customFrom || !customTo || customFrom > customTo}
+                  size="sm"
+                  variant="outline"
+                  className="border-zinc-700 text-zinc-400 hover:border-sky-400/30 hover:text-sky-400"
+                >
+                  <Play className={cn("mr-2 h-3.5 w-3.5", generating === "custom" && "animate-pulse")} />
+                  {generating === "custom" ? "Generating…" : "Generate"}
+                </Button>
+              </div>
+              <p className="text-[11px] text-zinc-600">
+                Type is auto-set: ≤ 7 days → Weekly, otherwise Monthly.
+              </p>
+            </div>
           </div>
 
           {/* Snapshots list */}
