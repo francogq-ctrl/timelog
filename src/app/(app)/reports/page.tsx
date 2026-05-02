@@ -1577,6 +1577,18 @@ function ByProjectView({
     1
   );
 
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggle = (gid: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(gid)) next.delete(gid);
+      else next.add(gid);
+      return next;
+    });
+  const allExpanded = expanded.size === projects.length && projects.length > 0;
+  const toggleAll = () =>
+    setExpanded(allExpanded ? new Set() : new Set(projects.map((p) => p.projectGid)));
+
   return (
     <div className="space-y-6">
       {/* Data quality callout */}
@@ -1654,18 +1666,45 @@ function ByProjectView({
       </div>
 
       {/* Part B: per-project task tables */}
-      <div className="space-y-5">
+      <div className="space-y-2">
+        <div className="flex items-center justify-between pb-1">
+          <p className="text-[11px] uppercase tracking-wider text-zinc-500">
+            Tasks per project
+          </p>
+          <button
+            type="button"
+            onClick={toggleAll}
+            className="text-[11px] text-zinc-400 hover:text-white transition"
+          >
+            {allExpanded ? "Collapse all" : "Expand all"}
+          </button>
+        </div>
         {projects.map((p) => {
           const visibleTasks = p.tasks.slice(0, TASK_ROW_LIMIT);
           const overflow = p.tasks.length - visibleTasks.length;
+          const isOpen = expanded.has(p.projectGid);
           return (
             <div
               key={p.projectGid}
               className="rounded-xl border border-white/[0.06] bg-white/[0.02] overflow-hidden"
             >
-              {/* Sticky-ish project header row */}
-              <div className="flex items-center justify-between border-b border-white/[0.06] bg-lime-400/[0.06] px-4 py-2">
-                <div className="min-w-0">
+              {/* Clickable project header row */}
+              <button
+                type="button"
+                onClick={() => toggle(p.projectGid)}
+                aria-expanded={isOpen}
+                className={cn(
+                  "flex w-full items-center justify-between bg-lime-400/[0.06] px-4 py-2 text-left transition hover:bg-lime-400/[0.1]",
+                  isOpen && "border-b border-white/[0.06]"
+                )}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <ChevronDown
+                    className={cn(
+                      "h-3.5 w-3.5 text-zinc-500 transition shrink-0",
+                      !isOpen && "-rotate-90"
+                    )}
+                  />
                   <p className="text-[13px] font-medium text-white truncate" title={p.projectName}>
                     {p.clientName}
                     <span className="ml-2 text-[12px] font-normal text-zinc-500">
@@ -1681,9 +1720,9 @@ function ByProjectView({
                     {p.loggedTaskCount}/{p.totalTaskCount} tracked
                   </span>
                 </div>
-              </div>
+              </button>
 
-              {p.tasks.length === 0 ? (
+              {isOpen && (p.tasks.length === 0 ? (
                 <p className="px-4 py-6 text-center text-[12px] text-zinc-600">
                   No tasks cached for this project
                 </p>
@@ -1773,7 +1812,7 @@ function ByProjectView({
                     </p>
                   )}
                 </div>
-              )}
+              ))}
             </div>
           );
         })}
